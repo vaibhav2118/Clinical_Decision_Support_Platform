@@ -1,0 +1,14 @@
+{
+  "name": "cdss-hospital-readmission-root",
+  "version": "1.0.0",
+  "description": "Orchestrates root commands for CDSS Frontend",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"cyan,green\" \".venv\\Scripts\\python -m uvicorn backend.api.main:app --host 127.0.0.1 --port 8000\" \"npm run dev --prefix frontend\"",
+    "build": "npm run build --prefix frontend",
+    "lint": "npm run lint --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  }
+}
