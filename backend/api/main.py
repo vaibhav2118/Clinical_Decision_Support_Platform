@@ -86,7 +86,8 @@ class RegisterRequest(BaseModel):
     username: str
     email: str
     password: str
-    role: str = "Doctor" # Default role
+    role: str = "Doctor"
+    tenant_name: str = "Alpha General Hospital"
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -94,6 +95,8 @@ class TokenResponse(BaseModel):
     token_type: str
     username: str
     role: str
+    tenant_id: Optional[int] = None
+    mfa_required: bool = False
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -101,6 +104,30 @@ class RefreshRequest(BaseModel):
 class RiskAssessmentRequest(BaseModel):
     patient_id: int
     admission_id: int
+
+class MfaVerifyRequest(BaseModel):
+    username: str
+    token: str
+
+class CohortCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    filters_json: dict
+
+class ChecklistItemCreateRequest(BaseModel):
+    task_description: str
+
+class FhirSyncRequest(BaseModel):
+    patient_mrn: str
+    gender: str
+    race: str
+    date_of_birth: str  # YYYY-MM-DD
+    admission_type: str = "Emergency"
+    insurance: str = "Private"
+
+class Hl7TriggerRequest(BaseModel):
+    hl7_message: str
+
 
 
 # --- API Routes ---
@@ -117,28 +144,38 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     if not role:
         raise HTTPException(status_code=400, detail=f"Role '{req.role}' does not exist")
         
+    tenant = db.query(Tenant).filter(Tenant.name == req.tenant_name).first()
+    if not tenant:
+        tenant = Tenant(name=req.tenant_name, domain=req.tenant_name.lower().replace(" ", "") + ".hospital.org")
+        db.add(tenant)
+        db.commit()
+        db.refresh(tenant)
+        
     new_user = User(
         username=req.username,
         email=req.email,
         hashed_password=get_password_hash(req.password),
-        role_id=role.id
+        role_id=role.id,
+        tenant_id=tenant.id
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     
     # Create tokens
-    access_token = create_access_token(data={"sub": new_user.username})
-    refresh_token = create_refresh_token(data={"sub": new_user.username})
+    access_token = create_access_token(data={"sub": new_user.username, "tenant_id": tenant.id})
+    refresh_token = create_refresh_token(data={"sub": new_user.username, "tenant_id": tenant.id})
     
-    log_audit(db, new_user.id, new_user.username, "User Register", f"Registered new user with role {req.role}")
+    log_audit(db, new_user.id, new_user.username, "User Register", f"Registered new user under tenant {req.tenant_name} with role {req.role}")
     
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
         "username": new_user.username,
-        "role": role.name
+        "role": role.name,
+        "tenant_id": tenant.id,
+        "mfa_required": False
     }
 
 @app.post("/api/auth/login", response_model=TokenResponse)
@@ -151,17 +188,39 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-    access_token = create_access_token(data={"sub": user.username})
-    refresh_token = create_refresh_token(data={"sub": user.username})
+    # Multi-tenant context seeding logic on demand
+    if not user.tenant_id:
+        default_tenant = db.query(Tenant).first()
+        if default_tenant:
+            user.tenant_id = default_tenant.id
+            db.commit()
+            db.refresh(user)
+
+    if user.mfa_enabled:
+        # User has MFA enabled, return mfa_required trigger so UI prompts for token code
+        return {
+            "access_token": "",
+            "refresh_token": "",
+            "token_type": "bearer",
+            "username": user.username,
+            "role": user.role.name,
+            "tenant_id": user.tenant_id,
+            "mfa_required": True
+        }
+
+    access_token = create_access_token(data={"sub": user.username, "tenant_id": user.tenant_id})
+    refresh_token = create_refresh_token(data={"sub": user.username, "tenant_id": user.tenant_id})
     
-    log_audit(db, user.id, user.username, "User Login", "Successfully logged in")
+    log_audit(db, user.id, user.username, "User Login", "Successfully logged in without MFA")
     
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
         "username": user.username,
-        "role": user.role.name
+        "role": user.role.name,
+        "tenant_id": user.tenant_id,
+        "mfa_required": False
     }
 
 @app.post("/api/auth/refresh")
@@ -196,6 +255,8 @@ def get_patients(
     db: Session = Depends(get_db)
 ):
     query = db.query(Patient)
+    if current_user.role.name != "Admin" and current_user.tenant_id is not None:
+        query = query.filter(Patient.tenant_id == current_user.tenant_id)
     
     if search:
         query = query.filter(Patient.patient_mrn.ilike(f"%{search}%"))
@@ -246,6 +307,10 @@ def get_patient_details(
     pt = db.query(Patient).filter(Patient.id == id).first()
     if not pt:
         raise HTTPException(status_code=404, detail="Patient not found")
+        
+    from backend.auth.auth import check_tenant_access
+    if not check_tenant_access(current_user, pt.tenant_id):
+        raise HTTPException(status_code=403, detail="Forbidden: Patient belongs to another hospital tenant")
         
     # Admission history
     adms = db.query(Admission).filter(Admission.patient_id == pt.id).order_by(Admission.admission_date.desc()).all()
@@ -305,6 +370,10 @@ def perform_risk_assessment(
     
     if not pt or not adm:
         raise HTTPException(status_code=404, detail="Patient or Admission record not found")
+        
+    from backend.auth.auth import check_tenant_access
+    if not check_tenant_access(current_user, pt.tenant_id) or not check_tenant_access(current_user, adm.tenant_id):
+        raise HTTPException(status_code=403, detail="Forbidden: Resource belongs to another hospital tenant")
         
     # Check if a model is trained and active
     active_model_ver = db.query(ModelVersion).filter(ModelVersion.is_active == True).first()
@@ -809,7 +878,12 @@ def get_audit_logs(
     current_user: User = Depends(RoleChecker(["Admin"])),
     db: Session = Depends(get_db)
 ):
-    logs = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(100).all()
+    query = db.query(AuditLog)
+    # Restrict audit logs to the user's tenant if they are not system admin
+    if current_user.tenant_id is not None:
+        query = query.join(User).filter(User.tenant_id == current_user.tenant_id)
+        
+    logs = query.order_by(AuditLog.timestamp.desc()).limit(100).all()
     
     formatted = [{
         "id": l.id,
@@ -821,3 +895,428 @@ def get_audit_logs(
     } for l in logs]
     
     return formatted
+
+
+# 9. MFA SETUP & VERIFICATION
+@app.post("/api/auth/mfa/setup")
+def setup_mfa(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Generate mock secret key if not set
+    if not current_user.mfa_secret:
+        current_user.mfa_secret = f"SECRET_{current_user.username.upper()}_OTP"
+    current_user.mfa_enabled = True
+    db.commit()
+    log_audit(db, current_user.id, current_user.username, "Enable MFA", "MFA setup successfully initiated")
+    return {
+        "status": "success",
+        "mfa_secret": current_user.mfa_secret,
+        "qr_code_mock": f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=otpauth://totp/CDSS:{current_user.username}?secret={current_user.mfa_secret}&issuer=CDSS"
+    }
+
+@app.post("/api/auth/mfa/verify", response_model=TokenResponse)
+def verify_mfa(req: MfaVerifyRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == req.username).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid credentials or inactive user")
+    
+    from backend.auth.auth import verify_mfa_token
+    if not user.mfa_secret or not verify_mfa_token(user.mfa_secret, req.token):
+        raise HTTPException(status_code=400, detail="Invalid MFA token")
+        
+    access_token = create_access_token(data={"sub": user.username, "tenant_id": user.tenant_id})
+    refresh_token = create_refresh_token(data={"sub": user.username, "tenant_id": user.tenant_id})
+    
+    log_audit(db, user.id, user.username, "MFA Verification", "Successfully verified MFA token")
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "username": user.username,
+        "role": user.role.name,
+        "tenant_id": user.tenant_id,
+        "mfa_required": False
+    }
+
+
+# 10. COHORT BUILDER ENDPOINTS
+@app.get("/api/cohorts")
+def get_cohorts(
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor", "Analyst"])),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Cohort)
+    if current_user.role.name != "Admin" and current_user.tenant_id is not None:
+        query = query.filter(Cohort.tenant_id == current_user.tenant_id)
+    cohorts = query.order_by(Cohort.created_at.desc()).all()
+    return [{
+        "id": c.id,
+        "name": c.name,
+        "description": c.description,
+        "filters_json": c.filters_json,
+        "created_at": c.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    } for c in cohorts]
+
+@app.post("/api/cohorts")
+def create_cohort(
+    req: CohortCreateRequest,
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor", "Analyst"])),
+    db: Session = Depends(get_db)
+):
+    new_cohort = Cohort(
+        name=req.name,
+        description=req.description,
+        filters_json=req.filters_json,
+        created_by=current_user.id,
+        tenant_id=current_user.tenant_id
+    )
+    db.add(new_cohort)
+    db.commit()
+    db.refresh(new_cohort)
+    log_audit(db, current_user.id, current_user.username, "Create Cohort", f"Saved clinical cohort: {req.name}")
+    return {"status": "success", "cohort_id": new_cohort.id}
+
+@app.delete("/api/cohorts/{id}")
+def delete_cohort(
+    id: int,
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor", "Analyst"])),
+    db: Session = Depends(get_db)
+):
+    cohort = db.query(Cohort).filter(Cohort.id == id).first()
+    if not cohort:
+        raise HTTPException(status_code=404, detail="Cohort not found")
+    
+    from backend.auth.auth import check_tenant_access
+    if not check_tenant_access(current_user, cohort.tenant_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    db.delete(cohort)
+    db.commit()
+    log_audit(db, current_user.id, current_user.username, "Delete Cohort", f"Deleted cohort ID {id}")
+    return {"status": "success"}
+
+
+# 11. CARE CHECKLIST ENDPOINTS
+@app.get("/api/checklist/{admission_id}")
+def get_checklist(
+    admission_id: int,
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor", "Nurse"])),
+    db: Session = Depends(get_db)
+):
+    adm = db.query(Admission).filter(Admission.id == admission_id).first()
+    if not adm:
+        raise HTTPException(status_code=404, detail="Admission record not found")
+        
+    from backend.auth.auth import check_tenant_access
+    if not check_tenant_access(current_user, adm.tenant_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    items = db.query(ChecklistItem).filter(ChecklistItem.admission_id == admission_id).all()
+    
+    # Auto-seed checklist items based on risk if empty
+    if not items:
+        # Check latest risk assessment
+        latest_risk = db.query(RiskAssessment).filter(RiskAssessment.admission_id == admission_id).first()
+        risk_tier = latest_risk.risk_tier if latest_risk else "Low"
+        
+        default_tasks = [
+            "Conduct standard post-discharge follow-up call at 72 hours.",
+            "Complete clinical discharge summary in patient EHR."
+        ]
+        
+        if risk_tier == "High":
+            default_tasks = [
+                "Schedule a follow-up PCP visit within 7 days.",
+                "Conduct full medication reconciliation check (insulin/blood thinners).",
+                "Assign skilled transitional care nurse for daily check-in call.",
+                "Review warning indicators (weight gain for heart failure) with patient."
+            ]
+        elif risk_tier == "Medium":
+            default_tasks = [
+                "Schedule follow-up appointment within 14 days.",
+                "Conduct follow-up nurse phone check at 48 hours.",
+                "Verify medication reconciliation check is completed."
+            ]
+            
+        for task in default_tasks:
+            item = ChecklistItem(admission_id=admission_id, task_description=task, is_completed=False)
+            db.add(item)
+        db.commit()
+        items = db.query(ChecklistItem).filter(ChecklistItem.admission_id == admission_id).all()
+        
+    return [{
+        "id": i.id,
+        "task_description": i.task_description,
+        "is_completed": i.is_completed,
+        "completed_at": i.completed_at.strftime("%Y-%m-%d %H:%M:%S") if i.completed_at else None,
+        "completed_by_id": i.completed_by_id
+    } for i in items]
+
+@app.post("/api/checklist/toggle/{item_id}")
+def toggle_checklist_item(
+    item_id: int,
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor", "Nurse"])),
+    db: Session = Depends(get_db)
+):
+    item = db.query(ChecklistItem).filter(ChecklistItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+        
+    # Check tenant access of the parent admission record
+    from backend.auth.auth import check_tenant_access
+    if not check_tenant_access(current_user, item.admission.tenant_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    item.is_completed = not item.is_completed
+    if item.is_completed:
+        item.completed_at = datetime.datetime.utcnow()
+        item.completed_by_id = current_user.id
+    else:
+        item.completed_at = None
+        item.completed_by_id = None
+        
+    db.commit()
+    db.refresh(item)
+    log_audit(db, current_user.id, current_user.username, "Toggle Checklist Item", f"Toggled checklist item ID {item_id}")
+    return {
+        "id": item.id,
+        "is_completed": item.is_completed,
+        "completed_at": item.completed_at.strftime("%Y-%m-%d %H:%M:%S") if item.completed_at else None
+    }
+
+
+# 12. ALERTS CENTER ENDPOINTS
+@app.get("/api/alerts")
+def get_alerts(
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor", "Nurse"])),
+    db: Session = Depends(get_db)
+):
+    query = db.query(AlertNotification)
+    # Check if a tenant should segregate results
+    if current_user.role.name != "Admin" and current_user.tenant_id is not None:
+        query = query.join(Patient).filter(Patient.tenant_id == current_user.tenant_id)
+        
+    alerts = query.order_by(AlertNotification.created_at.desc()).limit(50).all()
+    
+    return [{
+        "id": a.id,
+        "patient_id": a.patient_id,
+        "patient_mrn": a.patient.patient_mrn,
+        "admission_id": a.admission_id,
+        "message": a.message,
+        "severity": a.severity,
+        "is_read": a.is_read,
+        "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    } for a in alerts]
+
+@app.post("/api/alerts/read/{id}")
+def mark_alert_read(
+    id: int,
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor", "Nurse"])),
+    db: Session = Depends(get_db)
+):
+    alert = db.query(AlertNotification).filter(AlertNotification.id == id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+        
+    from backend.auth.auth import check_tenant_access
+    if not check_tenant_access(current_user, alert.patient.tenant_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    alert.is_read = True
+    db.commit()
+    return {"status": "success"}
+
+
+# 13. INTEGRATIONS FHIR / HL7 MOCKS
+@app.post("/api/integration/fhir/patient-sync")
+def fhir_patient_sync(
+    req: FhirSyncRequest,
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor"])),
+    db: Session = Depends(get_db)
+):
+    # Verify patient doesn't exist under this tenant
+    pt = db.query(Patient).filter(
+        Patient.patient_mrn == req.patient_mrn,
+        Patient.tenant_id == current_user.tenant_id
+    ).first()
+    
+    dob_date = datetime.datetime.strptime(req.date_of_birth, "%Y-%m-%d")
+    
+    if not pt:
+        pt = Patient(
+            patient_mrn=req.patient_mrn,
+            gender=req.gender,
+            race=req.race,
+            date_of_birth=dob_date,
+            tenant_id=current_user.tenant_id
+        )
+        db.add(pt)
+        db.commit()
+        db.refresh(pt)
+        
+    # Seed a new admission for the synced patient
+    adm_date = datetime.datetime.utcnow() - datetime.timedelta(days=2)
+    dis_date = datetime.datetime.utcnow() + datetime.timedelta(days=2)
+    
+    adm = Admission(
+        patient_id=pt.id,
+        admission_date=adm_date,
+        discharge_date=dis_date,
+        admission_type=req.admission_type,
+        discharge_disposition="Discharged to home",
+        insurance=req.insurance,
+        tenant_id=current_user.tenant_id
+    )
+    db.add(adm)
+    db.commit()
+    db.refresh(adm)
+    
+    # Add a mock diagnosis
+    diag = Diagnosis(
+        admission_id=adm.id,
+        code="428.0",
+        description="Congestive heart failure, unspecified",
+        category="Circulatory"
+    )
+    db.add(diag)
+    db.commit()
+    
+    log_audit(db, current_user.id, current_user.username, "FHIR Patient Sync", f"Synced patient MRN {req.patient_mrn} via SMART on FHIR")
+    return {
+        "status": "success",
+        "message": "Patient synced from EHR via SMART on FHIR successfully",
+        "patient_id": pt.id,
+        "admission_id": adm.id,
+        "patient_mrn": pt.patient_mrn
+    }
+
+@app.post("/api/integration/hl7/admission-trigger")
+def hl7_admission_trigger(
+    req: Hl7TriggerRequest,
+    current_user: User = Depends(RoleChecker(["Admin"])),
+    db: Session = Depends(get_db)
+):
+    try:
+        lines = req.hl7_message.split("\n")
+        mrn, name, gender, dob, race, insurance = "HL7-9999", "DOE^JOHN", "Male", "1960-01-01", "Caucasian", "Private"
+        for line in lines:
+            if line.startswith("PID"):
+                parts = line.split("|")
+                if len(parts) > 3: mrn = parts[3]
+                if len(parts) > 5: name = parts[5]
+                if len(parts) > 7: dob = parts[7]
+                if len(parts) > 8: gender = "Male" if parts[8] == "M" else "Female"
+                if len(parts) > 10: race = parts[10]
+            if line.startswith("PV1"):
+                parts = line.split("|")
+                if len(parts) > 10: insurance = parts[10]
+                
+        if len(dob) == 8:
+            dob_date = datetime.datetime.strptime(dob, "%Y%m%d")
+        else:
+            dob_date = datetime.datetime(1965, 5, 12)
+            
+        pt = db.query(Patient).filter(Patient.patient_mrn == mrn).first()
+        if not pt:
+            pt = Patient(
+                patient_mrn=mrn,
+                gender=gender,
+                race=race,
+                date_of_birth=dob_date,
+                tenant_id=current_user.tenant_id
+            )
+            db.add(pt)
+            db.commit()
+            db.refresh(pt)
+            
+        adm = Admission(
+            patient_id=pt.id,
+            admission_date=datetime.datetime.utcnow(),
+            discharge_date=datetime.datetime.utcnow() + datetime.timedelta(days=4),
+            admission_type="Emergency",
+            discharge_disposition="Discharged to home",
+            insurance=insurance,
+            tenant_id=current_user.tenant_id
+        )
+        db.add(adm)
+        db.commit()
+        db.refresh(adm)
+        
+        diag = Diagnosis(
+            admission_id=adm.id,
+            code="250.0",
+            description="Diabetes mellitus type II",
+            category="Diabetes"
+        )
+        db.add(diag)
+        db.commit()
+        
+        alert = AlertNotification(
+            patient_id=pt.id,
+            admission_id=adm.id,
+            message=f"Admission alert: Patient MRN {mrn} has high comorbidity readmission risk score.",
+            severity="High",
+            is_read=False
+        )
+        db.add(alert)
+        db.commit()
+        
+        log_audit(db, current_user.id, current_user.username, "HL7 Inbound Message", f"Received HL7 ADT message for MRN {mrn}")
+        return {
+            "status": "success",
+            "message": "HL7 message processed. Admission record created.",
+            "patient_mrn": mrn,
+            "admission_id": adm.id,
+            "simulated_risk": 0.68
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse HL7 message: {e}")
+
+
+# 14. CLINICAL NARRATIVE GENERATOR
+@app.post("/api/patient/{id}/narrative")
+def generate_clinical_narrative(
+    id: int,
+    current_user: User = Depends(RoleChecker(["Admin", "Doctor"])),
+    db: Session = Depends(get_db)
+):
+    pt = db.query(Patient).filter(Patient.id == id).first()
+    if not pt:
+        raise HTTPException(status_code=404, detail="Patient not found")
+        
+    from backend.auth.auth import check_tenant_access
+    if not check_tenant_access(current_user, pt.tenant_id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    # Get latest risk assessment
+    risk = db.query(RiskAssessment).filter(RiskAssessment.patient_id == id).order_by(RiskAssessment.created_at.desc()).first()
+    if not risk:
+        raise HTTPException(status_code=400, detail="Run risk prediction first to compute explanations")
+        
+    waterfall = risk.shap_waterfall or []
+    pos_drivers = [w["display_name"] for w in waterfall if w.get("shap_value", 0.0) > 0][:3]
+    neg_drivers = [w["display_name"] for w in waterfall if w.get("shap_value", 0.0) < 0][:2]
+    
+    narrative = f"CLINICAL RISK ASSESSMENT SUMMARY FOR PATIENT {pt.patient_mrn}\n"
+    narrative += f"Assessment Date: {risk.created_at.strftime('%Y-%m-%d')}\n"
+    narrative += f"30-Day Readmission Probability: {risk.probability * 100:.1f}% ({risk.risk_tier} Risk Classification)\n"
+    narrative += f"Model Version: {risk.model_version}\n\n"
+    narrative += "CLINICAL RISK FACTOR ANALYSIS:\n"
+    
+    if pos_drivers:
+        narrative += f"• Primary Risk Contributors: {', '.join(pos_drivers)}. These features significantly increased readmission liability.\n"
+    if neg_drivers:
+        narrative += f"• Protective Features: {', '.join(neg_drivers)}. These features offset standard risk values.\n"
+        
+    narrative += "\nDISCHARGE TRANSITIONAL PLANS:\n"
+    if risk.risk_tier == "High":
+        narrative += "• Intensive Follow-up Required: Schedule face-to-face physician follow-up within 7 days.\n"
+        narrative += "• Arrange professional transitional care nurse for follow-up outreach calls at 24 hours.\n"
+        narrative += "• Enforce complete clinical medication reconciliation on anticoagulants, diuretics, and cardiovascular therapy."
+    else:
+        narrative += "• Enforce standard post-discharge transitional care checklist. Schedule follow-up appointment within 14-30 days."
+        
+    return {"narrative": narrative}

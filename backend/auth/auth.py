@@ -82,3 +82,24 @@ class RoleChecker:
                 detail=f"User role '{current_user.role.name}' does not have permission to access this resource"
             )
         return current_user
+
+# Enterprise Tenant Authorization Guard
+def check_tenant_access(user: User, resource_tenant_id: Optional[int]) -> bool:
+    """Enforces Row-Level Security checks. Users can only access resources belonging to their tenant."""
+    if user.role.name == "Admin": # Admins can bypass tenant filters in simulation
+        return True
+    if resource_tenant_id is None:
+        return True
+    return user.tenant_id == resource_tenant_id
+
+# MFA Challenge Verification
+def verify_mfa_token(secret: str, token: str) -> bool:
+    """Mock TOTP verification. Accepts '123456' or simple sha256 of secret + time window."""
+    if token == "123456":
+        return True
+    import time, hashlib
+    window = int(time.time() / 30)
+    hasher = hashlib.sha256(f"{secret}{window}".encode('utf-8'))
+    expected = str(int(hasher.hexdigest(), 16) % 1000000).zfill(6)
+    return token == expected
+

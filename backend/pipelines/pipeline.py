@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 # Import SQLAlchemy models
 from backend.database.models import (
     Role, User, Patient, Admission, Diagnosis, Procedure,
-    ModelVersion, RiskAssessment, FairnessAudit, AuditLog
+    ModelVersion, RiskAssessment, FairnessAudit, AuditLog, Tenant
 )
 from backend.auth.auth import get_password_hash
 
@@ -65,6 +65,21 @@ def map_icd9_to_category(code: str) -> str:
 
 # --- DATABASE SEEDER (Synthetic Clinical Data) ---
 def seed_database(db: Session, num_patients: int = 250):
+    # 0. Seed Tenants
+    tenants = [
+        {"name": "Alpha General Hospital", "domain": "alpha.hospital.org"},
+        {"name": "Beta Clinical Center", "domain": "beta.hospital.org"}
+    ]
+    db_tenants = []
+    for t_data in tenants:
+        tenant = db.query(Tenant).filter(Tenant.name == t_data["name"]).first()
+        if not tenant:
+            tenant = Tenant(name=t_data["name"], domain=t_data["domain"])
+            db.add(tenant)
+            db.commit()
+            db.refresh(tenant)
+        db_tenants.append(tenant)
+
     # 1. Seed Roles
     roles = {
         "Admin": {"manage_users": True, "manage_models": True, "view_analytics": True},
@@ -97,7 +112,8 @@ def seed_database(db: Session, num_patients: int = 250):
                 username=username,
                 email=email,
                 hashed_password=get_password_hash(pwd),
-                role_id=db_roles[r_name].id
+                role_id=db_roles[r_name].id,
+                tenant_id=db_tenants[0].id
             )
             db.add(user)
     db.commit()
@@ -121,7 +137,7 @@ def seed_database(db: Session, num_patients: int = 250):
     other_codes = [("276", "Disorders of fluid, electrolyte, and acid-base balance"), ("780", "General symptoms")]
     
     procedure_codes = [("38.93", "Venous catheterization"), ("99.04", "Transfusion of packed cells"), ("88.72", "Diagnostic ultrasound of heart"), ("39.95", "Hemodialysis")]
-
+ 
     dispositions = [
         "Discharged to home", 
         "Discharged to home with home health service",
@@ -146,11 +162,15 @@ def seed_database(db: Session, num_patients: int = 250):
         dob = start_date + datetime.timedelta(days=random_days)
         dob_dt = datetime.datetime.combine(dob, datetime.time.min)
 
+        # Distribute patient records between hospital systems
+        patient_tenant_id = random.choices([db_tenants[0].id, db_tenants[1].id], weights=[0.7, 0.3])[0]
+
         patient = Patient(
             patient_mrn=patient_mrn,
             gender=gender,
             race=race,
-            date_of_birth=dob_dt
+            date_of_birth=dob_dt,
+            tenant_id=patient_tenant_id
         )
         db.add(patient)
         db.commit()
@@ -173,7 +193,8 @@ def seed_database(db: Session, num_patients: int = 250):
                 discharge_date=discharge_date,
                 admission_type=admission_type,
                 discharge_disposition=discharge_disp,
-                insurance=insurance
+                insurance=insurance,
+                tenant_id=patient_tenant_id
             )
             db.add(admission)
             db.commit()

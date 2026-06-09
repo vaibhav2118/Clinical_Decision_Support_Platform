@@ -3,6 +3,19 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boo
 from sqlalchemy.orm import relationship
 from backend.database.connection import Base
 
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    domain = Column(String(100), unique=True, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    users = relationship("User", back_populates="tenant")
+    patients = relationship("Patient", back_populates="tenant")
+    admissions = relationship("Admission", back_populates="tenant")
+    cohorts = relationship("Cohort", back_populates="tenant")
+
 class Role(Base):
     __tablename__ = "roles"
 
@@ -20,12 +33,17 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True)
     is_active = Column(Boolean, default=True)
+    mfa_enabled = Column(Boolean, default=False)
+    mfa_secret = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     role = relationship("Role", back_populates="users")
+    tenant = relationship("Tenant", back_populates="users")
     risk_assessments = relationship("RiskAssessment", back_populates="assessor")
     audit_logs = relationship("AuditLog", back_populates="user")
+    cohorts = relationship("Cohort", back_populates="creator")
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -35,8 +53,10 @@ class Patient(Base):
     gender = Column(String(20), nullable=False)  # Female, Male
     race = Column(String(50), nullable=False)    # Caucasian, African American, Asian, Hispanic, Other
     date_of_birth = Column(DateTime, nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    tenant = relationship("Tenant", back_populates="patients")
     admissions = relationship("Admission", back_populates="patient", cascade="all, delete-orphan")
     risk_assessments = relationship("RiskAssessment", back_populates="patient", cascade="all, delete-orphan")
     pdf_reports = relationship("PDFReport", back_populates="patient", cascade="all, delete-orphan")
@@ -51,13 +71,16 @@ class Admission(Base):
     admission_type = Column(String(50), nullable=False)  # Emergency, Urgent, Elective
     discharge_disposition = Column(String(100), nullable=False)  # Discharged to home, Transferred, etc.
     insurance = Column(String(50), nullable=False)        # Private, Medicaid, Medicare, Government, Self-Pay
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     patient = relationship("Patient", back_populates="admissions")
+    tenant = relationship("Tenant", back_populates="admissions")
     diagnoses = relationship("Diagnosis", back_populates="admission", cascade="all, delete-orphan")
     procedures = relationship("Procedure", back_populates="admission", cascade="all, delete-orphan")
     risk_assessments = relationship("RiskAssessment", back_populates="admission", cascade="all, delete-orphan")
     pdf_reports = relationship("PDFReport", back_populates="admission", cascade="all, delete-orphan")
+    checklist_items = relationship("ChecklistItem", back_populates="admission", cascade="all, delete-orphan")
 
 class Diagnosis(Base):
     __tablename__ = "diagnoses"
@@ -148,3 +171,42 @@ class AuditLog(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="audit_logs")
+
+class Cohort(Base):
+    __tablename__ = "cohorts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=True)
+    filters_json = Column(JSON, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    creator = relationship("User", back_populates="cohorts")
+    tenant = relationship("Tenant", back_populates="cohorts")
+
+class ChecklistItem(Base):
+    __tablename__ = "checklist_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)
+    task_description = Column(String(255), nullable=False)
+    is_completed = Column(Boolean, default=False)
+    completed_at = Column(DateTime, nullable=True)
+    completed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    admission = relationship("Admission", back_populates="checklist_items")
+
+class AlertNotification(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    admission_id = Column(Integer, ForeignKey("admissions.id"), nullable=False)
+    message = Column(String(255), nullable=False)
+    severity = Column(String(20), default="Medium")  # Low, Medium, High
+    is_read = Column(Boolean, default=False)
+    assigned_to_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+

@@ -1,13 +1,39 @@
 import React, { useState, useEffect } from 'react';
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { 
   Activity, Users, ShieldAlert, BarChart3, 
   Search, ShieldCheck, Sun, Moon, LogOut, FileText,
-  UserCheck, Download, AlertTriangle, RefreshCw, Layers
+  UserCheck, Download, AlertTriangle, RefreshCw, Layers, Bell, HelpCircle
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, PieChart, Pie, Legend, LineChart, Line
 } from 'recharts';
+
+// Marketing Landing Page Components
+import Navbar from './components/landing/Navbar';
+import Hero from './components/landing/Hero';
+import ROICalculator from './components/landing/ROICalculator';
+import Features from './components/landing/Features';
+import EHRShowcase from './components/landing/EHRShowcase';
+import WorkflowVisual from './components/landing/WorkflowVisual';
+import ComparisonGrid from './components/landing/ComparisonGrid';
+import Pricing from './components/landing/Pricing';
+import FAQ from './components/landing/FAQ';
+import ContactForm from './components/landing/ContactForm';
+import Footer from './components/landing/Footer';
+
+// Onboarding Components
+import OnboardingTour from './components/onboarding/OnboardingTour';
+import SetupWizard from './components/onboarding/SetupWizard';
+
+// Advanced Clinical Components
+import AlertCenter from './components/dashboard/AlertCenter';
+import CareChecklist from './components/dashboard/CareChecklist';
+import PatientTimeline from './components/dashboard/PatientTimeline';
+import CohortBuilder from './components/dashboard/CohortBuilder';
+import DriftDashboard from './components/dashboard/DriftDashboard';
+import ClinicalNarrative from './components/dashboard/ClinicalNarrative';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -15,6 +41,7 @@ interface User {
   username: string;
   role: string;
   token: string;
+  tenant_id?: number;
 }
 
 export default function App() {
@@ -22,18 +49,18 @@ export default function App() {
     const saved = localStorage.getItem('cdss_user');
     return saved ? JSON.parse(saved) : null;
   });
-  
-  const [activeTab, setActiveTab] = useState('dashboard');
+
   const [darkMode, setDarkMode] = useState(false);
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
   const [toasts, setToasts] = useState<{id: number; text: string; type: 'success' | 'error'}[]>([]);
 
-  // Toggle Dark Mode
+  // Dark Mode Class Toggling
   useEffect(() => {
     if (darkMode) {
       document.body.classList.add('dark-theme');
+      document.documentElement.classList.add('dark');
     } else {
       document.body.classList.remove('dark-theme');
+      document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
 
@@ -45,13 +72,6 @@ export default function App() {
     }, 4000);
   };
 
-  const logout = () => {
-    localStorage.removeItem('cdss_user');
-    setUser(null);
-    setSelectedPatientId(null);
-    addToast('Logged out successfully');
-  };
-
   const getAuthHeaders = () => {
     return {
       'Authorization': `Bearer ${user?.token}`,
@@ -59,190 +79,171 @@ export default function App() {
     };
   };
 
-  if (!user) {
-    return <LoginPage onLogin={(u) => { setUser(u); addToast(`Welcome back, ${u.username}!`); }} />;
-  }
-
   return (
-    <div className="app-container">
-      {/* Toast Notifications */}
-      <div className="toast-container">
-        {toasts.map(t => (
-          <div key={t.id} className={`toast toast-${t.type}`}>
-            <span style={{ fontWeight: 600 }}>{t.type === 'success' ? 'Success' : 'Error'}:</span>
-            <span>{t.text}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <Activity size={24} style={{ color: '#fff' }} />
-          <span>CDSS READMISSION</span>
-        </div>
+    <Router>
+      <div className="app-container font-sans antialiased text-slate-900 dark:text-slate-100 transition-colors duration-350 min-h-screen flex flex-col justify-between">
         
-        <ul className="sidebar-menu">
-          <li className="sidebar-item">
-            <button 
-              className={`sidebar-link w-full text-left ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('dashboard'); setSelectedPatientId(null); }}
-              style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer' }}
-            >
-              <BarChart3 size={18} />
-              <span>Clinical Dashboard</span>
-            </button>
-          </li>
-          <li className="sidebar-item">
-            <button 
-              className={`sidebar-link w-full text-left ${activeTab === 'patients' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('patients'); setSelectedPatientId(null); }}
-              style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer' }}
-            >
-              <Users size={18} />
-              <span>Patient Directory</span>
-            </button>
-          </li>
-          
-          {(user.role === 'Admin' || user.role === 'Analyst') && (
-            <li className="sidebar-item">
-              <button 
-                className={`sidebar-link w-full text-left ${activeTab === 'fairness' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('fairness'); setSelectedPatientId(null); }}
-                style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer' }}
-              >
-                <ShieldAlert size={18} />
-                <span>Fairness Monitoring</span>
-              </button>
-            </li>
-          )}
-
-          <li className="sidebar-item">
-            <button 
-              className={`sidebar-link w-full text-left ${activeTab === 'models' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('models'); setSelectedPatientId(null); }}
-              style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer' }}
-            >
-              <Layers size={18} />
-              <span>Model Quality & Drift</span>
-            </button>
-          </li>
-
-          {user.role === 'Admin' && (
-            <li className="sidebar-item">
-              <button 
-                className={`sidebar-link w-full text-left ${activeTab === 'audit' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('audit'); setSelectedPatientId(null); }}
-                style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer' }}
-              >
-                <ShieldCheck size={18} />
-                <span>System Audit Logs</span>
-              </button>
-            </li>
-          )}
-        </ul>
-
-        {/* Sidebar Profile Card */}
-        <div className="sidebar-footer" style={{ background: 'rgba(0,0,0,0.15)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-            <div style={{ 
-              width: '32px', height: '32px', borderRadius: '50%', 
-              background: 'linear-gradient(135deg, #4299e1 0%, #319795 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '12px'
-            }}>
-              {user.username[0].toUpperCase()}
+        {/* Global Toasts */}
+        <div className="toast-container fixed bottom-6 right-6 z-[2000] space-y-2">
+          {toasts.map(t => (
+            <div key={t.id} className={`toast flex items-center gap-3 px-4 py-3.5 rounded-xl border bg-white dark:bg-slate-950 shadow-xl border-l-4 ${
+              t.type === 'success' ? 'border-l-teal-500' : 'border-l-red-500'
+            } animate-slide-in text-xs font-medium`}>
+              <span className="font-bold text-slate-900 dark:text-white uppercase">{t.type}:</span>
+              <span>{t.text}</span>
             </div>
-            <div>
-              <div style={{ color: '#fff', fontSize: '13px', fontWeight: 600 }}>{user.username}</div>
-              <div style={{ fontSize: '11px', color: '#a0aec0' }}>{user.role}</div>
-            </div>
-          </div>
-          <button 
-            onClick={logout} 
-            className="btn btn-secondary" 
-            style={{ width: '100%', padding: '6px 12px', fontSize: '12px', borderColor: 'rgba(255,255,255,0.1)', color: '#cbd5e0' }}
-          >
-            <LogOut size={12} />
-            <span>Sign Out</span>
-          </button>
+          ))}
         </div>
-      </aside>
 
-      {/* Main Area */}
-      <div className="main-wrapper">
-        <header className="main-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 style={{ fontSize: '18px', fontWeight: 700 }}>
-              {activeTab === 'dashboard' && 'Clinical Analytics Dashboard'}
-              {activeTab === 'patients' && 'Patient Management System'}
-              {activeTab === 'fairness' && 'Fairlearn Bias & Parity Auditing'}
-              {activeTab === 'models' && 'Model Registry & Calibration'}
-              {activeTab === 'audit' && 'System Security Audit Trail'}
-            </h1>
-          </div>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            {/* Quick Role Switcher for local testing convenience */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-app)', padding: '4px 8px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <UserCheck size={14} style={{ color: 'var(--text-muted)' }} />
-              <select 
-                value={user.role} 
-                onChange={(e) => {
-                  const updated = { ...user, role: e.target.value };
-                  setUser(updated);
-                  localStorage.setItem('cdss_user', JSON.stringify(updated));
-                  addToast(`Switched active test role to: ${e.target.value}`);
-                }}
-                style={{ background: 'none', border: 'none', color: 'var(--text-main)', fontSize: '12px', fontWeight: 600, outline: 'none', cursor: 'pointer' }}
-              >
-                <option value="Admin">Admin</option>
-                <option value="Doctor">Doctor</option>
-                <option value="Nurse">Nurse</option>
-                <option value="Analyst">Analyst</option>
-              </select>
-            </div>
-
-            {/* Dark Mode Button */}
-            <button 
-              onClick={() => setDarkMode(!darkMode)}
-              style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer' }}
-            >
-              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-          </div>
-        </header>
-
-        <main className="content-body">
-          {selectedPatientId ? (
-            <PatientDetailsPage 
-              patientId={selectedPatientId} 
-              onBack={() => setSelectedPatientId(null)} 
-              userRole={user.role}
-              headers={getAuthHeaders()} 
-              addToast={addToast}
+        <Routes>
+          {/* Landing Page */}
+          <Route path="/" element={
+            <LandingPageRoute 
+              user={user} 
+              onLogout={() => { setUser(null); localStorage.removeItem('cdss_user'); }} 
             />
-          ) : (
-            <>
-              {activeTab === 'dashboard' && <DashboardTab headers={getAuthHeaders()} onSelectPatient={setSelectedPatientId} />}
-              {activeTab === 'patients' && <PatientsTab headers={getAuthHeaders()} onSelectPatient={setSelectedPatientId} />}
-              {activeTab === 'fairness' && <FairnessTab headers={getAuthHeaders()} />}
-              {activeTab === 'models' && <ModelsTab headers={getAuthHeaders()} userRole={user.role} addToast={addToast} />}
-              {activeTab === 'audit' && <AuditTab headers={getAuthHeaders()} />}
-            </>
-          )}
-        </main>
+          } />
+
+          {/* Login Route */}
+          <Route path="/login" element={
+            user ? <Navigate to="/dashboard" replace /> : (
+              <LoginPage onLogin={(u) => { setUser(u); addToast(`Welcome, ${u.username}!`); }} />
+            )
+          } />
+
+          {/* Onboarding Wizard */}
+          <Route path="/onboarding" element={
+            !user ? <Navigate to="/login" replace /> : (
+              <OnboardingRoute headers={getAuthHeaders()} />
+            )
+          } />
+
+          {/* Authenticated Dashboard */}
+          <Route path="/dashboard/*" element={
+            !user ? <Navigate to="/login" replace /> : (
+              <DashboardLayout 
+                user={user} 
+                setUser={setUser} 
+                headers={getAuthHeaders()} 
+                addToast={addToast} 
+                darkMode={darkMode} 
+                setDarkMode={setDarkMode} 
+              />
+            )
+          } />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+
       </div>
+    </Router>
+  );
+}
+
+// --- LANDING PAGE ROUTE WRAPPER ---
+function LandingPageRoute({ user, onLogout }: { user: User | null; onLogout: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Navbar 
+        onLoginClick={() => navigate(user ? '/dashboard' : '/login')} 
+        onDemoClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
+      />
+      <main className="flex-grow">
+        <Hero 
+          onDemoClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}
+          onWatchWalkthrough={() => document.getElementById('workflow')?.scrollIntoView({ behavior: 'smooth' })}
+        />
+        
+        {/* Compliance Row */}
+        <section className="bg-slate-50 dark:bg-slate-900/30 border-y border-slate-200/60 dark:border-slate-800/80 py-8 transition-colors duration-300">
+          <div className="max-w-7xl mx-auto px-4 flex flex-wrap justify-center items-center gap-8 md:gap-16 text-slate-400 dark:text-slate-600 font-display font-bold text-xs uppercase tracking-widest">
+            <span>HIPAA Ready</span>
+            <span>SOC 2 Compliance</span>
+            <span>GDPR Ready</span>
+            <span>HL7 Feeds</span>
+            <span>SMART on FHIR</span>
+            <span>FDA SaMD Ready</span>
+          </div>
+        </section>
+
+        {/* Clinical Impact Metrics */}
+        <section className="py-16 bg-white dark:bg-slate-900 text-slate-900 dark:text-white transition-colors duration-300">
+          <div className="max-w-7xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="text-center">
+              <div className="text-4xl font-display font-bold text-blue-600 dark:text-blue-500 mb-1">25%</div>
+              <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Readmission Reduction</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-display font-bold text-blue-600 dark:text-blue-500 mb-1">94.2%</div>
+              <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Risk Detection AUC</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-display font-bold text-blue-600 dark:text-blue-500 mb-1">88%</div>
+              <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Clinician Adoption Rate</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-display font-bold text-blue-600 dark:text-blue-500 mb-1">11x</div>
+              <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Investment ROI</div>
+            </div>
+          </div>
+        </section>
+
+        <Features />
+        <WorkflowVisual />
+        <EHRShowcase />
+        <ROICalculator />
+        <ComparisonGrid />
+        
+        {/* Testimonials */}
+        <section className="py-20 bg-white dark:bg-slate-900 text-slate-900 dark:text-white transition-colors duration-300">
+          <div className="max-w-4xl mx-auto px-4 text-center">
+            <h2 className="font-display text-3xl font-bold mb-12">Trusted by Leading Medical Professionals</h2>
+            <div className="bg-slate-50 dark:bg-slate-950 p-8 rounded-2xl border border-slate-100 dark:border-slate-850 shadow-md">
+              <p className="font-sans italic text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+                "Implementing the CDSS platform at our cardiac wards reduced readmission metrics by 22% in the first quarter. The SHAP explainability waterfall gives our physicians confidence to trust the recommendations during discharge checklists."
+              </p>
+              <div className="font-display font-bold text-sm text-slate-900 dark:text-white">Dr. Sarah Jenkins, MD</div>
+              <div className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider mt-0.5">Chief of Medicine, Mercy Healthcare Group</div>
+            </div>
+          </div>
+        </section>
+
+        <Pricing />
+        <FAQ />
+        
+        <div id="demo">
+          <ContactForm />
+        </div>
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+// --- ONBOARDING WIZARD ROUTE WRAPPER ---
+function OnboardingRoute({ headers }: { headers: any }) {
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900/50 p-6">
+      <SetupWizard headers={headers} onComplete={() => navigate('/dashboard')} />
     </div>
   );
 }
 
 // --- LOGIN PAGE COMPONENT ---
 function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
+  const navigate = useNavigate();
   const [username, setUsername] = useState('doctor');
   const [password, setPassword] = useState('doctor');
   const [role, setRole] = useState('Doctor');
+  const [tenantName, setTenantName] = useState('Alpha General Hospital');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // MFA States
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaToken, setMfaToken] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,14 +259,48 @@ function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
         throw new Error('Incorrect username or password');
       }
       const data = await res.json();
+      
+      if (data.mfa_required) {
+        setMfaRequired(true);
+        setLoading(false);
+        return;
+      }
+
       onLogin({
         username: data.username,
         role: data.role,
-        token: data.access_token
+        token: data.access_token,
+        tenant_id: data.tenant_id
       });
+      navigate('/onboarding');
     } catch (err: any) {
-      // Fallback local registration bypass for immediate testing simplicity
       setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/mfa/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, token: mfaToken })
+      });
+      if (!res.ok) throw new Error('Invalid MFA token code');
+      const data = await res.json();
+      onLogin({
+        username: data.username,
+        role: data.role,
+        token: data.access_token,
+        tenant_id: data.tenant_id
+      });
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'MFA validation failed');
     } finally {
       setLoading(false);
     }
@@ -278,17 +313,25 @@ function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
       const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email: `${username}@cdss.hospital.org`, password, role })
+        body: JSON.stringify({ 
+          username, 
+          email: `${username}@cdss.hospital.org`, 
+          password, 
+          role,
+          tenant_name: tenantName
+        })
       });
       if (!res.ok) {
-        throw new Error('User already exists or register failed');
+        throw new Error('Registration failed (tenant connection error)');
       }
       const data = await res.json();
       onLogin({
         username: data.username,
         role: data.role,
-        token: data.access_token
+        token: data.access_token,
+        tenant_id: data.tenant_id
       });
+      navigate('/onboarding');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -297,89 +340,348 @@ function LoginPage({ onLogin }: { onLogin: (u: User) => void }) {
   };
 
   return (
-    <div style={{ 
-      height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-      background: 'linear-gradient(135deg, #1a202c 0%, #2d3748 100%)', padding: '20px' 
-    }}>
-      <div className="card" style={{ width: '420px', padding: '36px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div style={{ 
-            width: '56px', height: '56px', borderRadius: '14px', 
-            background: 'linear-gradient(135deg, #3182ce 0%, #319795 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto'
-          }}>
-            <Activity size={28} style={{ color: '#fff' }} />
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
+      <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 max-w-md w-full p-8 rounded-2xl shadow-2xl relative text-left">
+        
+        <div className="text-center mb-8">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-teal-500 flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <Activity className="h-6 w-6 text-white" />
           </div>
-          <h2 style={{ fontSize: '24px', fontWeight: 700, fontFamily: 'var(--font-display)' }}>CDSS Clinical Login</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Secure Readmission Prediction Engine</p>
+          <h2 className="font-display font-bold text-2xl text-slate-900 dark:text-white">CDSS Portal Access</h2>
+          <p className="font-sans text-xs text-slate-500 mt-1">AI-Powered Readmission Analytics & Compliance Gateway</p>
         </div>
 
         {error && (
-          <div style={{ backgroundColor: 'var(--danger-bg)', color: 'var(--danger-text)', padding: '10px 14px', borderRadius: '6px', fontSize: '13px', marginBottom: '18px', border: '1px solid var(--danger)' }}>
+          <div className="mb-4 p-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-xs font-semibold">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin}>
-          <div className="form-group">
-            <label className="form-label">Username</label>
-            <input 
-              type="text" 
-              className="form-input" 
-              value={username} 
-              onChange={e => setUsername(e.target.value)} 
-              required 
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Password</label>
-            <input 
-              type="password" 
-              className="form-input" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              required 
-            />
-          </div>
+        {!mfaRequired ? (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">Username</label>
+              <input 
+                type="text" required value={username} onChange={e => setUsername(e.target.value)}
+                className="form-input text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">Password</label>
+              <input 
+                type="password" required value={password} onChange={e => setPassword(e.target.value)}
+                className="form-input text-xs"
+              />
+            </div>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
-            <button type="submit" disabled={loading} className="btn btn-primary" style={{ flexGrow: 1 }}>
-              {loading ? 'Processing...' : 'Sign In'}
+            <button 
+              type="submit" disabled={loading}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold font-sans shadow-lg shadow-blue-500/10 active:scale-95 transition-all text-center block"
+            >
+              {loading ? 'Authenticating...' : 'Secure Sign In'}
             </button>
-          </div>
-        </form>
+          </form>
+        ) : (
+          <form onSubmit={handleMfaVerify} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
+                Enter MFA Token Code
+              </label>
+              <p className="font-sans text-[11px] text-slate-400 leading-normal mb-2">
+                A verification code challenge has been sent to your device. Enter '123456' for simulated testing bypass.
+              </p>
+              <input 
+                type="text" required maxLength={6} value={mfaToken} onChange={e => setMfaToken(e.target.value)}
+                placeholder="123456" className="form-input text-xs tracking-[0.5em] text-center"
+              />
+            </div>
 
-        <div style={{ margin: '20px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ flexGrow: 1, height: '1px', backgroundColor: 'var(--border)' }}></div>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>OR REGISTER TEST USER</span>
-          <div style={{ flexGrow: 1, height: '1px', backgroundColor: 'var(--border)' }}></div>
-        </div>
+            <button 
+              type="submit" disabled={loading}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold font-sans shadow-lg shadow-blue-500/10 active:scale-95 transition-all text-center block"
+            >
+              Verify Token
+            </button>
+          </form>
+        )}
 
-        <div>
-          <div className="form-group">
-            <label className="form-label">Role Profile</label>
-            <select className="form-input" value={role} onChange={e => setRole(e.target.value)}>
-              <option value="Doctor">Doctor (Inference, Reports)</option>
-              <option value="Nurse">Nurse (Read-Only Risk Scores)</option>
-              <option value="Analyst">Analyst (Fairness monitoring)</option>
-              <option value="Admin">Admin (Full Control)</option>
-            </select>
-          </div>
-          <button 
-            type="button" 
-            onClick={handleRegisterFallback} 
-            disabled={loading} 
-            className="btn btn-secondary w-full"
-            style={{ width: '100%' }}
-          >
-            Create & Sign In
-          </button>
-        </div>
+        {!mfaRequired && (
+          <>
+            <div className="my-6 flex items-center justify-between gap-4">
+              <div className="h-px bg-slate-200 dark:bg-slate-800 w-full" />
+              <span className="text-[9px] font-bold text-slate-400 tracking-wider uppercase whitespace-nowrap">Or Register Test Account</span>
+              <div className="h-px bg-slate-200 dark:bg-slate-800 w-full" />
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">Facility Tenant Name</label>
+                <input 
+                  type="text" value={tenantName} onChange={e => setTenantName(e.target.value)}
+                  className="form-input text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">Clinical Role profile</label>
+                <select className="form-input text-xs font-semibold" value={role} onChange={e => setRole(e.target.value)}>
+                  <option value="Doctor">Doctor (Assess, Export Reports)</option>
+                  <option value="Nurse">Nurse (Read-Only checklist access)</option>
+                  <option value="Analyst">Analyst (Fairness Parity, Drift dashboard)</option>
+                  <option value="Admin">Admin (Model Registry, Logs)</option>
+                </select>
+              </div>
+
+              <button 
+                type="button" onClick={handleRegisterFallback} disabled={loading}
+                className="w-full py-2.5 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-xl text-xs font-bold font-sans transition-all text-center block"
+              >
+                Create Account & Join
+              </button>
+            </div>
+          </>
+        )}
+
       </div>
     </div>
   );
 }
 
+// --- CLINICAL DASHBOARD LAYOUT & CONTROLLER ---
+interface DashboardLayoutProps {
+  user: User;
+  setUser: (u: User | null) => void;
+  headers: any;
+  addToast: (t: string, type?: 'success' | 'error') => void;
+  darkMode: boolean;
+  setDarkMode: (d: boolean) => void;
+}
+
+function DashboardLayout({ user, setUser, headers, addToast, darkMode, setDarkMode }: DashboardLayoutProps) {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
+  
+  // Modal states
+  const [showAlertDrawer, setShowAlertDrawer] = useState(false);
+  const [showOnboardingTour, setShowOnboardingTour] = useState(false);
+
+  const logout = () => {
+    localStorage.removeItem('cdss_user');
+    setUser(null);
+    setSelectedPatientId(null);
+    addToast('Logged out successfully');
+    navigate('/');
+  };
+
+  return (
+    <div className="flex flex-grow w-full h-full app-container">
+      {/* Onboarding guided tour overlay modal */}
+      {showOnboardingTour && (
+        <OnboardingTour onClose={() => setShowOnboardingTour(false)} />
+      )}
+
+      {/* Slide-out Sidebar Alert drawer */}
+      {showAlertDrawer && (
+        <AlertCenter 
+          headers={headers} 
+          onClose={() => setShowAlertDrawer(false)} 
+          onSelectPatient={(id) => { setSelectedPatientId(id); setActiveTab('patients'); }}
+        />
+      )}
+
+      {/* Sidebar Navigation */}
+      <aside className="sidebar w-64 border-r border-slate-200/60 dark:border-slate-800 bg-slate-950 text-slate-400 flex flex-col justify-between shrink-0 select-none">
+        <div>
+          <div className="sidebar-brand h-16 px-6 flex items-center gap-2 border-b border-slate-900 bg-slate-950 font-display font-bold text-white text-base">
+            <Activity className="h-5 w-5 text-blue-500" />
+            <span>CDSS PLATFORM</span>
+          </div>
+
+          <ul className="p-3 space-y-1 list-none text-left">
+            <li>
+              <button 
+                onClick={() => { setActiveTab('dashboard'); setSelectedPatientId(null); }}
+                className={`sidebar-link w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeTab === 'dashboard' ? 'active bg-slate-900 text-white border-l-4 border-l-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                }`}
+              >
+                <BarChart3 className="h-4.5 w-4.5" />
+                <span>Clinical Dashboard</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => { setActiveTab('patients'); setSelectedPatientId(null); }}
+                className={`sidebar-link w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeTab === 'patients' ? 'active bg-slate-900 text-white border-l-4 border-l-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                }`}
+              >
+                <Users className="h-4.5 w-4.5" />
+                <span>Patient Directory</span>
+              </button>
+            </li>
+            <li>
+              <button 
+                onClick={() => { setActiveTab('cohorts'); setSelectedPatientId(null); }}
+                className={`sidebar-link w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeTab === 'cohorts' ? 'active bg-slate-900 text-white border-l-4 border-l-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                }`}
+              >
+                <Search className="h-4.5 w-4.5" />
+                <span>Cohort Builder</span>
+              </button>
+            </li>
+            {(user.role === 'Admin' || user.role === 'Analyst') && (
+              <li>
+                <button 
+                  onClick={() => { setActiveTab('fairness'); setSelectedPatientId(null); }}
+                  className={`sidebar-link w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                    activeTab === 'fairness' ? 'active bg-slate-900 text-white border-l-4 border-l-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                  }`}
+                >
+                  <ShieldAlert className="h-4.5 w-4.5" />
+                  <span>Fairness Audit</span>
+                </button>
+              </li>
+            )}
+            <li>
+              <button 
+                onClick={() => { setActiveTab('models'); setSelectedPatientId(null); }}
+                className={`sidebar-link w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeTab === 'models' ? 'active bg-slate-900 text-white border-l-4 border-l-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                }`}
+              >
+                <Layers className="h-4.5 w-4.5" />
+                <span>Quality & Drift</span>
+              </button>
+            </li>
+            {user.role === 'Admin' && (
+              <li>
+                <button 
+                  onClick={() => { setActiveTab('audit'); setSelectedPatientId(null); }}
+                  className={`sidebar-link w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+                    activeTab === 'audit' ? 'active bg-slate-900 text-white border-l-4 border-l-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                  }`}
+                >
+                  <ShieldCheck className="h-4.5 w-4.5" />
+                  <span>Security Audit Logs</span>
+                </button>
+              </li>
+            )}
+          </ul>
+        </div>
+
+        {/* Profile Card Footer */}
+        <div className="p-4 border-t border-slate-900 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-teal-500 text-white font-bold text-xs flex items-center justify-center uppercase">
+              {user.username[0]}
+            </div>
+            <div className="text-left">
+              <div className="text-xs font-bold text-white leading-tight">{user.username}</div>
+              <div className="text-[10px] text-slate-500 font-semibold">{user.role} Profile</div>
+            </div>
+          </div>
+          <button 
+            onClick={logout}
+            className="w-full py-2 bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-850 rounded-lg text-xs font-bold font-sans transition-all flex items-center justify-center gap-2"
+          >
+            <LogOut className="h-3.5 w-3.5" /> Log Out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Container Area */}
+      <div className="flex-grow flex flex-col min-w-0">
+        <header className="h-16 px-8 border-b border-slate-200/60 dark:border-slate-800 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md sticky top-0 z-45 flex items-center justify-between select-none">
+          <h2 className="font-display font-bold text-base text-slate-900 dark:text-white">
+            {selectedPatientId ? 'Patient Encounter Analysis' : (
+              <>
+                {activeTab === 'dashboard' && 'Clinical Analytics Dashboard'}
+                {activeTab === 'patients' && 'Patient Directory Management'}
+                {activeTab === 'cohorts' && 'Saved Cohorts builder'}
+                {activeTab === 'fairness' && 'Demographic Parity Bias Audit'}
+                {activeTab === 'models' && 'Model Registry Governance'}
+                {activeTab === 'audit' && 'Tamper-Proof Operations Log'}
+              </>
+            )}
+          </h2>
+
+          <div className="flex items-center gap-4">
+            
+            {/* Onboarding Tour Help Button */}
+            <button 
+              onClick={() => setShowOnboardingTour(true)}
+              className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg text-slate-500 dark:text-slate-400 flex items-center gap-1.5 transition-all"
+            >
+              <HelpCircle className="h-4.5 w-4.5" />
+              <span className="text-[10px] font-bold font-sans">Launch Tour</span>
+            </button>
+
+            {/* Quick switcher simulation dropdown */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+              <UserCheck className="h-4 w-4 text-slate-500" />
+              <select 
+                value={user.role} 
+                onChange={(e) => {
+                  const updated = { ...user, role: e.target.value };
+                  setUser(updated);
+                  localStorage.setItem('cdss_user', JSON.stringify(updated));
+                  addToast(`Switched credentials to: ${e.target.value}`);
+                }}
+                className="bg-transparent outline-none border-none text-[10px] font-bold text-slate-700 dark:text-slate-300 font-sans cursor-pointer select-none"
+              >
+                <option value="Admin">Admin</option>
+                <option value="Doctor">Doctor</option>
+                <option value="Nurse">Nurse</option>
+                <option value="Analyst">Analyst</option>
+              </select>
+            </div>
+
+            {/* Alerts Center Bell */}
+            <button 
+              onClick={() => setShowAlertDrawer(true)}
+              className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg text-slate-500 dark:text-slate-400 transition-all relative"
+            >
+              <Bell className="h-4.5 w-4.5" />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+            </button>
+
+            {/* Dark Mode button */}
+            <button 
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg text-slate-500 dark:text-slate-400 transition-all"
+            >
+              {darkMode ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+            </button>
+          </div>
+        </header>
+
+        <main className="p-8 flex-grow max-w-7xl w-full mx-auto overflow-y-auto">
+          {selectedPatientId ? (
+            <PatientDetailsPage 
+              patientId={selectedPatientId}
+              onBack={() => setSelectedPatientId(null)}
+              userRole={user.role}
+              headers={headers}
+              addToast={addToast}
+            />
+          ) : (
+            <>
+              {activeTab === 'dashboard' && <DashboardTab headers={headers} onSelectPatient={setSelectedPatientId} />}
+              {activeTab === 'patients' && <PatientsTab headers={headers} onSelectPatient={setSelectedPatientId} />}
+              {activeTab === 'cohorts' && <CohortBuilder headers={headers} addToast={addToast} />}
+              {activeTab === 'fairness' && <FairnessTab headers={headers} />}
+              {activeTab === 'models' && <ModelsTab headers={headers} userRole={user.role} addToast={addToast} />}
+              {activeTab === 'audit' && <AuditTab headers={headers} />}
+            </>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
 
 // --- CLINICAL DASHBOARD TAB ---
 function DashboardTab({ headers, onSelectPatient }: { headers: any; onSelectPatient: (id: number) => void }) {
@@ -397,54 +699,54 @@ function DashboardTab({ headers, onSelectPatient }: { headers: any; onSelectPati
   if (!data) return <div>Failed to load dashboard data. Ensure backend is running.</div>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="flex flex-col gap-6 text-left">
       {/* Stat Panels */}
-      <div className="grid-cols-12">
-        <div className="col-span-3 card stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(229, 62, 62, 0.15)', color: '#e53e3e' }}>
-            <ShieldAlert size={24} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/80 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+            <ShieldAlert className="h-6 w-6" />
           </div>
-          <div className="stat-info">
-            <div className="stat-value">{data.high_risk_count}</div>
-            <div className="stat-label">High-Risk Patients</div>
-          </div>
-        </div>
-        <div className="col-span-3 card stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(49, 151, 149, 0.15)', color: '#319795' }}>
-            <Activity size={24} />
-          </div>
-          <div className="stat-info">
-            <div className="stat-value">{data.average_risk_score}%</div>
-            <div className="stat-label">Average Readmit Probability</div>
+          <div>
+            <div className="text-xl font-display font-bold text-slate-900 dark:text-white leading-tight">{data.high_risk_count}</div>
+            <div className="text-xs text-slate-500">High-Risk Patients</div>
           </div>
         </div>
-        <div className="col-span-3 card stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(66, 153, 225, 0.15)', color: '#4299e1' }}>
-            <Users size={24} />
+        <div className="bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/80 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+            <Activity className="h-6 w-6" />
           </div>
-          <div className="stat-info">
-            <div className="stat-value">{data.total_patients}</div>
-            <div className="stat-label">Total Patients Managed</div>
+          <div>
+            <div className="text-xl font-display font-bold text-slate-900 dark:text-white leading-tight">{data.average_risk_score}%</div>
+            <div className="text-xs text-slate-500">Avg Readmit Prob</div>
           </div>
         </div>
-        <div className="col-span-3 card stat-card">
-          <div className="stat-icon" style={{ backgroundColor: 'rgba(113, 128, 150, 0.15)', color: '#718096' }}>
-            <FileText size={24} />
+        <div className="bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/80 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <Users className="h-6 w-6" />
           </div>
-          <div className="stat-info">
-            <div className="stat-value">{data.total_admissions}</div>
-            <div className="stat-label">Total Admissions Logged</div>
+          <div>
+            <div className="text-xl font-display font-bold text-slate-900 dark:text-white leading-tight">{data.total_patients}</div>
+            <div className="text-xs text-slate-500">Total Patients</div>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/80 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center shrink-0">
+            <FileText className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="text-xl font-display font-bold text-slate-900 dark:text-white leading-tight">{data.total_admissions}</div>
+            <div className="text-xs text-slate-500">Total Admissions</div>
           </div>
         </div>
       </div>
 
       {/* Charts section */}
-      <div className="grid-cols-12">
-        <div className="col-span-8 card">
-          <div className="card-title">Hospital Readmission Probability Trend (6 Months)</div>
-          <div style={{ height: '300px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        <div className="lg:col-span-8 bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg">
+          <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Hospital Readmission Probability Trend (6 Months)</div>
+          <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.readmission_trends} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <AreaChart data={data.readmission_trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3182ce" stopOpacity={0.4}/>
@@ -452,23 +754,23 @@ function DashboardTab({ headers, onSelectPatient }: { headers: any; onSelectPati
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="month" stroke="var(--text-muted)" />
-                <YAxis unit="%" stroke="var(--text-muted)" />
+                <XAxis dataKey="month" stroke="#718096" style={{ fontSize: '10px' }} />
+                <YAxis unit="%" stroke="#718096" style={{ fontSize: '10px' }} />
                 <Tooltip />
-                <Area type="monotone" dataKey="avg_risk" stroke="#3182ce" fillOpacity={1} fill="url(#colorRisk)" name="Avg Risk" />
+                <Area type="monotone" dataKey="avg_risk" stroke="#3182ce" fillOpacity={1} fill="url(#colorRisk)" name="Avg Risk" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="col-span-4 card">
-          <div className="card-title">Department Readmission Index</div>
-          <div style={{ height: '300px' }}>
+        <div className="lg:col-span-4 bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg">
+          <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Department Readmission Index</div>
+          <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.department_analytics} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+              <BarChart data={data.department_analytics} layout="vertical" margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis type="number" unit="%" stroke="var(--text-muted)" />
-                <YAxis dataKey="department" type="category" stroke="var(--text-muted)" width={80} style={{ fontSize: '11px' }} />
+                <XAxis type="number" unit="%" stroke="#718096" style={{ fontSize: '10px' }} />
+                <YAxis dataKey="department" type="category" stroke="#718096" width={75} style={{ fontSize: '9px' }} />
                 <Tooltip />
                 <Bar dataKey="avg_risk" fill="#319795" radius={[0, 4, 4, 0]}>
                   {data.department_analytics.map((entry: any, index: number) => (
@@ -482,18 +784,18 @@ function DashboardTab({ headers, onSelectPatient }: { headers: any; onSelectPati
       </div>
 
       {/* Demographics & High-Risk list */}
-      <div className="grid-cols-12">
-        <div className="col-span-4 card">
-          <div className="card-title">Race Demographics Distribution</div>
-          <div style={{ height: '240px', display: 'flex', justifyContent: 'center' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        <div className="lg:col-span-4 bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg">
+          <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Race Demographics Distribution</div>
+          <div className="h-60 flex justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={data.demographics.race}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
+                  innerRadius={55}
+                  outerRadius={75}
                   paddingAngle={5}
                   dataKey="value"
                 >
@@ -502,14 +804,14 @@ function DashboardTab({ headers, onSelectPatient }: { headers: any; onSelectPati
                   ))}
                 </Pie>
                 <Tooltip />
-                <Legend layout="horizontal" align="center" verticalAlign="bottom" wrapperStyle={{ fontSize: '11px' }} />
+                <Legend layout="horizontal" align="center" verticalAlign="bottom" wrapperStyle={{ fontSize: '10px' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="col-span-8 card">
-          <div className="card-title">Patients Currently Flagged as High-Risk</div>
+        <div className="lg:col-span-8 bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg">
+          <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Attending Patients Flagged High-Risk</div>
           <div className="table-container">
             <table className="table">
               <thead>
@@ -518,41 +820,34 @@ function DashboardTab({ headers, onSelectPatient }: { headers: any; onSelectPati
                   <th>Gender</th>
                   <th>Race</th>
                   <th>Readmit Probability</th>
-                  <th>Risk Tier</th>
+                  <th>Classification</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {data.recent_high_risk.map((pt: any) => (
                   <tr key={pt.patient_id}>
-                    <td style={{ fontWeight: 600 }}>{pt.patient_mrn}</td>
+                    <td className="font-semibold">{pt.patient_mrn}</td>
                     <td>{pt.gender}</td>
                     <td>{pt.race}</td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '40px', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{ width: `${pt.probability}%`, height: '100%', backgroundColor: '#e53e3e' }}></div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-10 h-1.5 bg-slate-100 dark:bg-slate-850 rounded-full overflow-hidden">
+                          <div className="h-full bg-red-500" style={{ width: `${pt.probability}%` }} />
                         </div>
-                        <span style={{ fontWeight: 'bold', color: '#e53e3e' }}>{pt.probability}%</span>
+                        <span className="font-bold text-red-500">{pt.probability}%</span>
                       </div>
                     </td>
                     <td>
-                      <span className="badge badge-high">High</span>
+                      <span className="badge badge-high text-[10px]">High</span>
                     </td>
                     <td>
-                      <button onClick={() => onSelectPatient(pt.patient_id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }}>
+                      <button onClick={() => onSelectPatient(pt.patient_id)} className="btn btn-secondary py-1 px-3 text-[10px]">
                         Open Case
                       </button>
                     </td>
                   </tr>
                 ))}
-                {data.recent_high_risk.length === 0 && (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
-                      No patients currently flagged as high risk.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
@@ -561,7 +856,6 @@ function DashboardTab({ headers, onSelectPatient }: { headers: any; onSelectPati
     </div>
   );
 }
-
 
 // --- PATIENTS DIRECTORY TAB ---
 function PatientsTab({ headers, onSelectPatient }: { headers: any; onSelectPatient: (id: number) => void }) {
@@ -583,8 +877,10 @@ function PatientsTab({ headers, onSelectPatient }: { headers: any; onSelectPatie
     fetch(url, { headers })
       .then(res => res.json())
       .then(json => {
-        setPatients(json.patients);
-        setTotal(json.total);
+        if (Array.isArray(json.patients)) {
+          setPatients(json.patients);
+          setTotal(json.total);
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -601,30 +897,28 @@ function PatientsTab({ headers, onSelectPatient }: { headers: any; onSelectPatie
   };
 
   return (
-    <div className="card">
-      <div className="card-title">Patient Records Directory</div>
+    <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg text-left">
+      <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Patient Records Directory</div>
 
       {/* Filters Form */}
-      <form onSubmit={handleSearchSubmit} style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '24px' }}>
-        <div style={{ flexGrow: 1, minWidth: '240px' }}>
-          <div className="search-wrapper">
-            <input 
-              type="text" 
-              placeholder="Search Patient MRN (e.g. MRN-100)..." 
-              className="form-input" 
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
-            />
-          </div>
+      <form onSubmit={handleSearchSubmit} className="flex flex-wrap gap-4 mb-6">
+        <div className="flex-grow min-w-[200px]">
+          <input 
+            type="text" 
+            placeholder="Search Patient MRN..." 
+            className="form-input text-xs" 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+          />
         </div>
 
-        <select className="form-input" style={{ width: '150px' }} value={gender} onChange={e => { setGender(e.target.value); setPage(1); }}>
+        <select className="form-input text-xs w-[140px]" value={gender} onChange={e => { setGender(e.target.value); setPage(1); }}>
           <option value="">All Genders</option>
           <option value="Female">Female</option>
           <option value="Male">Male</option>
         </select>
 
-        <select className="form-input" style={{ width: '180px' }} value={race} onChange={e => { setRace(e.target.value); setPage(1); }}>
+        <select className="form-input text-xs w-[160px]" value={race} onChange={e => { setRace(e.target.value); setPage(1); }}>
           <option value="">All Races</option>
           <option value="Caucasian">Caucasian</option>
           <option value="African American">African American</option>
@@ -633,9 +927,8 @@ function PatientsTab({ headers, onSelectPatient }: { headers: any; onSelectPatie
           <option value="Other">Other</option>
         </select>
 
-        <button type="submit" className="btn btn-primary">
-          <Search size={16} />
-          <span>Apply Filter</span>
+        <button type="submit" className="btn btn-primary py-2 px-4 text-xs">
+          <Search className="h-4 w-4" /> Filter Directory
         </button>
       </form>
 
@@ -660,29 +953,31 @@ function PatientsTab({ headers, onSelectPatient }: { headers: any; onSelectPatie
               <tbody>
                 {patients.map(p => (
                   <tr key={p.id}>
-                    <td style={{ fontWeight: 600 }}>{p.patient_mrn}</td>
+                    <td className="font-semibold">{p.patient_mrn}</td>
                     <td>{p.age}</td>
                     <td>{p.gender}</td>
                     <td>{p.race}</td>
                     <td>{p.latest_admission_date}</td>
                     <td>
                       {p.latest_risk_score !== null ? (
-                        <span style={{ fontWeight: 'bold', color: p.latest_risk_score > 60 ? 'var(--danger)' : p.latest_risk_score > 25 ? 'var(--warning)' : 'var(--success)' }}>
+                        <span className="font-bold text-xs" style={{ 
+                          color: p.latest_risk_score > 60 ? 'var(--danger)' : p.latest_risk_score > 25 ? 'var(--warning)' : 'var(--success)' 
+                        }}>
                           {p.latest_risk_score}%
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>Unassessed</span>
+                        <span className="text-slate-400">Unassessed</span>
                       )}
                     </td>
                     <td>
-                      {p.latest_risk_tier === 'High' && <span className="badge badge-high">High</span>}
-                      {p.latest_risk_tier === 'Medium' && <span className="badge badge-medium">Medium</span>}
-                      {p.latest_risk_tier === 'Low' && <span className="badge badge-low">Low</span>}
-                      {p.latest_risk_tier === 'Unassessed' && <span className="badge" style={{ backgroundColor: 'var(--border)', color: 'var(--text-muted)' }}>None</span>}
+                      {p.latest_risk_tier === 'High' && <span className="badge badge-high text-[10px]">High</span>}
+                      {p.latest_risk_tier === 'Medium' && <span className="badge badge-medium text-[10px]">Medium</span>}
+                      {p.latest_risk_tier === 'Low' && <span className="badge badge-low text-[10px]">Low</span>}
+                      {(p.latest_risk_tier === 'Unassessed' || !p.latest_risk_tier) && <span className="badge bg-slate-100 text-slate-400 border border-slate-200 text-[10px]">None</span>}
                     </td>
                     <td>
-                      <button onClick={() => onSelectPatient(p.id)} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '12px' }}>
-                        View Details
+                      <button onClick={() => onSelectPatient(p.id)} className="btn btn-secondary py-1 px-3 text-[10px]">
+                        Open Case
                       </button>
                     </td>
                   </tr>
@@ -692,24 +987,18 @@ function PatientsTab({ headers, onSelectPatient }: { headers: any; onSelectPatie
           </div>
 
           {/* Pagination */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              Showing {patients.length} of {total} records
-            </span>
-            <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="flex justify-between items-center mt-6 text-xs text-slate-400">
+            <span>Showing {patients.length} of {total} records</span>
+            <div className="flex gap-2">
               <button 
-                onClick={() => setPage(p => Math.max(p - 1, 1))} 
-                disabled={page === 1}
-                className="btn btn-secondary" 
-                style={{ padding: '6px 12px', fontSize: '12px' }}
+                onClick={() => setPage(p => Math.max(p - 1, 1))} disabled={page === 1}
+                className="btn btn-secondary py-1 px-3 disabled:opacity-50"
               >
                 Previous
               </button>
               <button 
-                onClick={() => setPage(p => p + 1)} 
-                disabled={page * 10 >= total}
-                className="btn btn-secondary" 
-                style={{ padding: '6px 12px', fontSize: '12px' }}
+                onClick={() => setPage(p => p + 1)} disabled={page * 10 >= total}
+                className="btn btn-secondary py-1 px-3 disabled:opacity-50"
               >
                 Next
               </button>
@@ -721,8 +1010,7 @@ function PatientsTab({ headers, onSelectPatient }: { headers: any; onSelectPatie
   );
 }
 
-
-// --- PATIENT DETAILS & RISK ASSESSMENT PAGE ---
+// --- PATIENT ENCOUNTER DETAILS PAGE ---
 interface PatientDetailsProps {
   patientId: number;
   onBack: () => void;
@@ -766,11 +1054,11 @@ function PatientDetailsPage({ patientId, onBack, userRole, headers, addToast }: 
         headers,
         body: JSON.stringify({ patient_id: patientId, admission_id: selectedAdmissionId })
       });
-      if (!res.ok) throw new Error('Failed to compute risk scoring');
+      if (!res.ok) throw new Error('Inference failure');
       const data = await res.json();
       setAssessmentResult(data);
-      addToast('Readmission risk assessment generated successfully!');
-      loadDetails(); // reload list
+      addToast('Readmission risk assessment computed successfully!');
+      loadDetails();
     } catch (e: any) {
       addToast(e.message || 'Error running assessment', 'error');
     } finally {
@@ -782,17 +1070,12 @@ function PatientDetailsPage({ patientId, onBack, userRole, headers, addToast }: 
     if (!assessmentResult && !getSelectedAdmissionAssessment()) return;
     setGeneratingReport(true);
     try {
-      // Find assessment ID
       let assessmentId = assessmentResult?.assessment_id;
       if (!assessmentId) {
-        // If not in state, look at patient object history for selected admission
         const selectedAdm = patient.admissions.find((a: any) => a.id === selectedAdmissionId);
-        // Risk assessment needs to be triggered or retrieved
         if (!selectedAdm || selectedAdm.risk_score === null) {
           throw new Error('Must run risk assessment before generating report');
         }
-        // Since we don't have the assessment ID easily, we run assessment again or fetch it
-        // To be safe, we run assessment to get ID
         const resAssess = await fetch(`${API_BASE}/api/risk-assessment`, {
           method: 'POST',
           headers,
@@ -809,7 +1092,6 @@ function PatientDetailsPage({ patientId, onBack, userRole, headers, addToast }: 
       if (!res.ok) throw new Error('PDF generation failed');
       const reportInfo = await res.json();
       
-      // Trigger download
       window.open(`${API_BASE}/api/reports/download/${reportInfo.report_id}?token=${headers.Authorization.split(' ')[1]}`, '_blank');
       addToast('Clinical report PDF generated and download started!');
     } catch (e: any) {
@@ -833,254 +1115,218 @@ function PatientDetailsPage({ patientId, onBack, userRole, headers, addToast }: 
   const activeAssessment = assessmentResult || getSelectedAdmissionAssessment();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Header back button */}
+    <div className="flex flex-col gap-6 text-left">
       <div>
-        <button onClick={onBack} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }}>
+        <button onClick={onBack} className="btn btn-secondary py-2 px-4 text-xs font-semibold">
           ← Back to Patient Directory
         </button>
       </div>
 
-      <div className="grid-cols-12">
-        {/* Left Side: Patient File */}
-        <div className="col-span-4 card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ textAlign: 'center', paddingBottom: '20px', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ 
-              width: '64px', height: '64px', borderRadius: '50%', background: 'var(--border)', 
-              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' 
-            }}>
-              <Users size={32} style={{ color: 'var(--text-muted)' }} />
-            </div>
-            <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Patient File</h3>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>MRN: {patient.patient_mrn}</span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Gender:</span>
-              <span style={{ fontWeight: 600 }}>{patient.gender}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Demographic Race:</span>
-              <span style={{ fontWeight: 600 }}>{patient.race}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Date of Birth:</span>
-              <span style={{ fontWeight: 600 }}>{patient.dob}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Current Age:</span>
-              <span style={{ fontWeight: 600 }}>{patient.age} years</span>
-            </div>
-          </div>
-
-          {/* Admission Picker */}
-          <div style={{ marginTop: '10px' }}>
-            <label className="form-label">Select Admission Episode</label>
-            <select 
-              className="form-input" 
-              value={selectedAdmissionId || ''} 
-              onChange={e => { setSelectedAdmissionId(Number(e.target.value)); setAssessmentResult(null); }}
-            >
-              {patient.admissions.map((a: any) => (
-                <option key={a.id} value={a.id}>
-                  Admitted {a.admission_date} ({a.admission_type})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Current Admission Specs */}
-          {currentAdmission && (
-            <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '13px' }}>
-              <div style={{ fontWeight: 700, marginBottom: '8px', color: 'var(--text-main)' }}>Admission Specs</div>
-              <div style={{ marginBottom: '4px' }}><b>Discharge Date:</b> {currentAdmission.discharge_date}</div>
-              <div style={{ marginBottom: '4px' }}><b>Disposition:</b> {currentAdmission.discharge_disposition}</div>
-              <div style={{ marginBottom: '8px' }}><b>Insurance Coverage:</b> {currentAdmission.insurance}</div>
-              
-              <div style={{ fontWeight: 700, margin: '10px 0 4px 0' }}>Diagnoses ICD-9</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                {currentAdmission.diagnoses.map((d: any) => (
-                  <span key={d.code} style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>
-                    {d.code} - {d.category}
-                  </span>
-                ))}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        {/* Left Side: Demographic Specs */}
+        <div className="lg:col-span-4 bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-md flex flex-col justify-between">
+          <div>
+            <h3 className="font-display text-base font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-850 pb-3 mb-4">Patient File Specifications</h3>
+            
+            <div className="space-y-3 font-sans text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">MRN ID:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">{patient.patient_mrn}</span>
               </div>
-
-              <div style={{ fontWeight: 700, margin: '10px 0 4px 0' }}>Procedures</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                {currentAdmission.procedures.map((p: any) => (
-                  <span key={p.code} style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>
-                    {p.code} ({p.description})
-                  </span>
-                ))}
-                {currentAdmission.procedures.length === 0 && <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>None logged</span>}
+              <div className="flex justify-between">
+                <span className="text-slate-400">Gender:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">{patient.gender}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Race Demographics:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">{patient.race}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Date of Birth:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">{patient.dob}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Current Age:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200">{patient.age} years</span>
               </div>
             </div>
-          )}
+
+            <div className="my-5">
+              <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1.5">Select Encounter Episode</label>
+              <select 
+                className="form-input text-xs font-semibold" 
+                value={selectedAdmissionId || ''} 
+                onChange={e => { setSelectedAdmissionId(Number(e.target.value)); setAssessmentResult(null); }}
+              >
+                {patient.admissions.map((a: any) => (
+                  <option key={a.id} value={a.id}>
+                    Admitted {a.admission_date} ({a.admission_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {currentAdmission && (
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-xl space-y-3 text-[11px] text-slate-600 dark:text-slate-400">
+                <div className="font-bold text-slate-900 dark:text-white">Admission Specs</div>
+                <div><b>Discharge:</b> {currentAdmission.discharge_date}</div>
+                <div><b>Disposition:</b> {currentAdmission.discharge_disposition}</div>
+                <div><b>Insurance:</b> {currentAdmission.insurance}</div>
+                
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white mb-1">Diagnoses ICD-9</div>
+                  <div className="flex flex-wrap gap-1">
+                    {currentAdmission.diagnoses.map((d: any) => (
+                      <span key={d.code} className="bg-white dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2 py-0.5 rounded text-[10px]">
+                        {d.code} - {d.category}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="font-bold text-slate-900 dark:text-white mb-1">Procedures</div>
+                  <div className="flex flex-wrap gap-1">
+                    {currentAdmission.procedures.map((p: any) => (
+                      <span key={p.code} className="bg-white dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2 py-0.5 rounded text-[10px]">
+                        {p.code}
+                      </span>
+                    ))}
+                    {currentAdmission.procedures.length === 0 && <span className="italic text-slate-400">None logged</span>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right Side: Risk Scoring panel */}
-        <div className="col-span-8 card" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Readmission Probability & Explainable AI</h3>
-            
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '10px' }}>
-              {userRole !== 'Nurse' && (
-                <button 
-                  onClick={handleAssessRisk} 
-                  disabled={assessing || !selectedAdmissionId} 
-                  className="btn btn-primary"
-                >
-                  <RefreshCw size={16} className={assessing ? 'animate-spin' : ''} />
-                  <span>{assessing ? 'Calculating...' : 'Run Prediction Engine'}</span>
-                </button>
-              )}
+        {/* Right Side: Risk predictions and modular checklists/timelines */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">Readmission Risk & Explainable AI</h3>
               
-              {activeAssessment && (
-                <button 
-                  onClick={handleGenerateReport} 
-                  disabled={generatingReport} 
-                  className="btn btn-secondary"
-                >
-                  <Download size={16} />
-                  <span>{generatingReport ? 'Generating...' : 'Clinical Report PDF'}</span>
-                </button>
-              )}
+              <div className="flex gap-2">
+                {userRole !== 'Nurse' && (
+                  <button 
+                    onClick={handleAssessRisk} disabled={assessing || !selectedAdmissionId}
+                    className="btn btn-primary py-2 px-4 text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-blue-500/10 active:scale-95"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${assessing ? 'animate-spin' : ''}`} />
+                    <span>{assessing ? 'Calculating...' : 'Run Risk Engine'}</span>
+                  </button>
+                )}
+                {activeAssessment && (
+                  <button 
+                    onClick={handleGenerateReport} disabled={generatingReport}
+                    className="btn btn-secondary py-2 px-4 text-xs font-semibold flex items-center gap-1.5"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>{generatingReport ? 'Generating...' : 'Discharge PDF'}</span>
+                  </button>
+                )}
+              </div>
             </div>
+
+            {!activeAssessment ? (
+              <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl py-12 px-6 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+                <AlertTriangle className="h-10 w-10 text-slate-300 dark:text-slate-700" />
+                <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">Prediction Pending</h4>
+                <p className="font-sans text-xs max-w-sm leading-normal">
+                  Calculate readmission risk using active model versions in the registry.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                
+                {/* Score & Gauge panel */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800 rounded-xl flex items-center gap-6">
+                  {/* Gauge */}
+                  <div className="relative w-24 h-24 flex items-center justify-center shrink-0">
+                    <svg className="w-24 h-24 -rotate-90">
+                      <circle cx="48" cy="48" r="40" stroke="var(--border)" strokeWidth="6" fill="transparent" />
+                      <circle 
+                        cx="48" cy="48" r="40" 
+                        stroke={activeAssessment.risk_tier === 'High' ? 'var(--danger)' : activeAssessment.risk_tier === 'Medium' ? 'var(--warning)' : 'var(--success)'} 
+                        strokeWidth="6" fill="transparent" 
+                        strokeDasharray={2 * Math.PI * 40}
+                        strokeDashoffset={2 * Math.PI * 40 * (1 - (activeAssessment.probability || activeAssessment.risk_score) / 100)}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute font-display font-bold text-base text-slate-900 dark:text-white">
+                      {activeAssessment.probability || activeAssessment.risk_score}%
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-xs text-slate-500 font-medium">30-Day Readmission Risk:</span>
+                      {activeAssessment.risk_tier === 'High' && <span className="badge badge-high text-[9px]">High Risk</span>}
+                      {activeAssessment.risk_tier === 'Medium' && <span className="badge badge-medium text-[9px]">Medium Risk</span>}
+                      {activeAssessment.risk_tier === 'Low' && <span className="badge badge-low text-[9px]">Low Risk</span>}
+                    </div>
+                    <p className="font-sans text-[10px] text-slate-400">
+                      Model Version: {activeAssessment.model_version || 'Active Model'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* SHAP Waterfall Chart */}
+                <div>
+                  <h4 className="font-display text-xs font-bold text-slate-900 dark:text-white mb-3">SHAP Local Explainability drivers</h4>
+                  <div className="space-y-2.5">
+                    {activeAssessment.shap_waterfall?.map((item: any) => {
+                      const isPositive = item.shap_value > 0;
+                      const percentWidth = Math.min(Math.abs(item.shap_value) * 200, 100);
+                      return (
+                        <div key={item.feature} className="flex items-center gap-3 text-xs">
+                          <div className="w-32 font-semibold text-slate-700 dark:text-slate-300 truncate">{item.display_name}</div>
+                          <div className="w-10 text-slate-400">{item.value}</div>
+                          
+                          <div className="flex-grow h-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-850 rounded relative overflow-hidden">
+                            <div 
+                              className={`h-full absolute left-1/2 ${isPositive ? 'bg-red-500/40' : 'bg-teal-500/40'}`}
+                              style={{ 
+                                width: `${percentWidth}%`,
+                                transform: isPositive ? 'none' : 'translateX(-100%)'
+                              }}
+                            />
+                            <div className="absolute left-1/2 top-0 bottom-0 w-px bg-slate-200 dark:bg-slate-800" />
+                          </div>
+
+                          <div className={`w-14 text-right font-bold ${isPositive ? 'text-red-500' : 'text-teal-500'}`}>
+                            {isPositive ? '+' : ''}{(item.shap_value * 100).toFixed(1)}%
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+              </div>
+            )}
           </div>
 
-          {!activeAssessment ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', border: '2px dashed var(--border)', borderRadius: '10px', color: 'var(--text-muted)' }}>
-              <AlertTriangle size={36} style={{ marginBottom: '12px' }} />
-              <p style={{ fontWeight: 600 }}>Risk Assessment Pending</p>
-              <p style={{ fontSize: '13px', textAlign: 'center', maxWidth: '340px', marginTop: '4px' }}>
-                {userRole === 'Nurse' 
-                  ? 'No risk assessment has been logged for this admission yet. Contact the attending physician.'
-                  : 'An assessment has not been executed for this admission session yet. Click the button above to calculate.'
-                }
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {/* Score panel */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', backgroundColor: 'var(--bg-app)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border)', alignItems: 'center' }}>
-                {/* Visual Circular Gauge */}
-                <div style={{ width: '100px', height: '100px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg style={{ transform: 'rotate(-90deg)', width: '100px', height: '100px' }}>
-                    <circle cx="50" cy="50" r="42" stroke="var(--border)" strokeWidth="8" fill="transparent" />
-                    <circle 
-                      cx="50" 
-                      cy="50" 
-                      r="42" 
-                      stroke={activeAssessment.risk_tier === 'High' ? 'var(--danger)' : activeAssessment.risk_tier === 'Medium' ? 'var(--warning)' : 'var(--success)'} 
-                      strokeWidth="8" 
-                      fill="transparent" 
-                      strokeDasharray={2 * Math.PI * 42}
-                      strokeDashoffset={2 * Math.PI * 42 * (1 - (activeAssessment.probability || activeAssessment.risk_score) / 100)}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div style={{ position: 'absolute', fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: 700 }}>
-                    {activeAssessment.probability || activeAssessment.risk_score}%
-                  </div>
-                </div>
-
-                <div style={{ flexGrow: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>30-Day Readmission Risk:</span>
-                    {activeAssessment.risk_tier === 'High' && <span className="badge badge-high">High Risk</span>}
-                    {activeAssessment.risk_tier === 'Medium' && <span className="badge badge-medium">Medium Risk</span>}
-                    {activeAssessment.risk_tier === 'Low' && <span className="badge badge-low">Low Risk</span>}
-                  </div>
-                  <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                    Model: {activeAssessment.model_version || 'Active Model'}
-                  </p>
-                </div>
-              </div>
-
-              {/* SHAP Waterfall explanations */}
-              <div>
-                <h4 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>SHAP Explainable AI: Feature Drivers</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {activeAssessment.shap_waterfall?.map((item: any) => {
-                    const isPositive = item.shap_value > 0;
-                    // Scale shap value for graphics width (max impact is typically around 0.3-0.4)
-                    const percentWidth = Math.min(Math.abs(item.shap_value) * 250, 100);
-                    
-                    return (
-                      <div key={item.feature} style={{ display: 'flex', alignItems: 'center', fontSize: '12px', gap: '10px' }}>
-                        <div style={{ width: '150px', fontWeight: 600, color: 'var(--text-main)' }}>{item.display_name}</div>
-                        <div style={{ width: '40px', color: 'var(--text-muted)' }}>{item.value}</div>
-                        
-                        {/* Bar graphics */}
-                        <div style={{ flexGrow: 1, display: 'flex', alignItems: 'center', position: 'relative', height: '20px', backgroundColor: 'var(--bg-app)', borderRadius: '4px', overflow: 'hidden' }}>
-                          <div style={{ 
-                            position: 'absolute',
-                            left: '50%',
-                            transform: isPositive ? 'none' : 'translateX(-100%)',
-                            width: `${percentWidth}%`,
-                            height: '100%',
-                            backgroundColor: isPositive ? 'rgba(229, 62, 62, 0.6)' : 'rgba(49, 151, 149, 0.6)'
-                          }}></div>
-                          
-                          {/* Centered line */}
-                          <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: '1px', backgroundColor: 'var(--border)' }}></div>
-                        </div>
-
-                        <div style={{ width: '70px', textAlign: 'right', fontWeight: 'bold', color: isPositive ? 'var(--danger)' : 'var(--success)' }}>
-                          {isPositive ? '+' : ''}{(item.shap_value * 100).toFixed(1)}%
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Narrative Text */}
-              <div>
-                <h4 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>Clinical Risk Narrative</h4>
-                <div style={{ 
-                  backgroundColor: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '8px', 
-                  padding: '16px', fontSize: '13px', lineHeight: '1.6', whiteSpace: 'pre-line' 
-                }}>
-                  {activeAssessment.risk_explanation}
-                </div>
-              </div>
-
-              {/* Recommended transition checklist */}
-              <div>
-                <h4 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>Recommended Transition Care Checklist</h4>
-                <ul style={{ paddingLeft: '20px', fontSize: '13px', lineHeight: '1.8' }}>
-                  {activeAssessment.risk_tier === 'High' ? (
-                    <>
-                      <li><b>Transitional Care Specialist:</b> Daily follow-up telephone calls starting 24h post-discharge.</li>
-                      <li><b>Primary Care Physician:</b> Schedule follow-up clinical encounter within 7 days.</li>
-                      <li><b>Medication Reconciliation:</b> Attending pharmacist review of discharge medications.</li>
-                    </>
-                  ) : activeAssessment.risk_tier === 'Medium' ? (
-                    <>
-                      <li><b>Attending Follow-up:</b> Nurse outreach telephone check-in at 48h.</li>
-                      <li><b>Primary Care Appointment:</b> Clinic visit scheduled in 14 days.</li>
-                    </>
-                  ) : (
-                    <>
-                      <li><b>Discharge Care:</b> Standard nurse outreach call at 72h.</li>
-                    </>
-                  )}
-                </ul>
-              </div>
+          {/* Interactive Checklist & Timelines & Clinical Narratives */}
+          {selectedAdmissionId && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <CareChecklist admissionId={selectedAdmissionId} headers={headers} addToast={addToast} />
+              <ClinicalNarrative patientId={patientId} headers={headers} addToast={addToast} />
             </div>
           )}
+
+          {selectedAdmissionId && (
+            <PatientTimeline admissions={patient.admissions} riskHistory={patient.risk_history} />
+          )}
+
         </div>
       </div>
     </div>
   );
 }
 
-
-// --- FAIRNESS MONITORING TAB ---
+// --- FAIRNESS TAB COMPONENT ---
 function FairnessTab({ headers }: { headers: any }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -1118,21 +1364,18 @@ function FairnessTab({ headers }: { headers: any }) {
   if (!data) return <div>Failed to load fairness data. Ensure model has been trained.</div>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+    <div className="flex flex-col gap-6 text-left">
+      <div className="flex justify-between items-center bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800">
+        <p className="text-xs text-slate-500 max-w-lg leading-normal">
           Fairlearn monitoring tracks parity differences to prevent biased clinical decisions across demographics.
         </p>
-        <button onClick={handleTriggerAudit} disabled={auditing} className="btn btn-primary">
-          <RefreshCw size={16} className={auditing ? 'animate-spin' : ''} />
+        <button onClick={handleTriggerAudit} disabled={auditing} className="btn btn-primary py-2 px-4 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-blue-500/10">
+          <RefreshCw className={`h-4 w-4 ${auditing ? 'animate-spin' : ''}`} />
           <span>{auditing ? 'Re-auditing...' : 'Run Group Fairness Audit'}</span>
         </button>
       </div>
 
-      {/* Sensitive attributes cards */}
       {Object.entries(data).map(([attrName, value]: any) => {
-        // Prepare chart data
-        // Filter out ALL row for plotting subgroup bars
         const chartData = value.metrics
           .filter((m: any) => m.metric === 'Selection Rate')
           .map((m: any) => {
@@ -1147,40 +1390,38 @@ function FairnessTab({ headers }: { headers: any }) {
           });
 
         return (
-          <div key={attrName} className="card grid-cols-12" style={{ gap: '24px' }}>
-            <div className="col-span-4" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--primary)' }}>{attrName} Audit Overview</h3>
+          <div key={attrName} className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div className="lg:col-span-4 space-y-4">
+              <h3 className="font-display font-bold text-base text-slate-900 dark:text-white leading-tight">{attrName} Audit Overview</h3>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>DEMOGRAPHIC PARITY DIFF</div>
-                  <div style={{ fontSize: '20px', fontWeight: 700 }}>{(value.demographic_parity_difference * 100).toFixed(2)}%</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Max difference in selection rate</div>
+              <div className="space-y-3">
+                <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-xl">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">DEMOGRAPHIC PARITY DIFF</div>
+                  <div className="text-xl font-display font-bold text-slate-900 dark:text-white">{(value.demographic_parity_difference * 100).toFixed(2)}%</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Max difference in selection rate</div>
                 </div>
 
-                <div style={{ backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>EQUALIZED ODDS DIFF</div>
-                  <div style={{ fontSize: '20px', fontWeight: 700 }}>{(value.equalized_odds_difference * 100).toFixed(2)}%</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Max difference in error rates</div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-xl">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">EQUALIZED ODDS DIFF</div>
+                  <div className="text-xl font-display font-bold text-slate-900 dark:text-white">{(value.equalized_odds_difference * 100).toFixed(2)}%</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Max difference in error rates</div>
                 </div>
               </div>
             </div>
 
-            <div className="col-span-8">
-              <div style={{ height: '240px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="group" stroke="var(--text-muted)" />
-                    <YAxis unit="%" stroke="var(--text-muted)" />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Selection Rate" fill="#3182ce" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="False Positive Rate" fill="#e53e3e" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="False Negative Rate" fill="#ed8936" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            <div className="lg:col-span-8 h-60">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="group" stroke="#718096" style={{ fontSize: '10px' }} />
+                  <YAxis unit="%" stroke="#718096" style={{ fontSize: '10px' }} />
+                  <Tooltip />
+                  <Legend style={{ fontSize: '10px' }} />
+                  <Bar dataKey="Selection Rate" fill="#3182ce" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="False Positive Rate" fill="#e53e3e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="False Negative Rate" fill="#ed8936" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         );
@@ -1189,8 +1430,7 @@ function FairnessTab({ headers }: { headers: any }) {
   );
 }
 
-
-// --- MODEL MONITORING & DRIFT TAB ---
+// --- MODELS QUALITY TAB COMPONENT ---
 function ModelsTab({ headers, userRole, addToast }: { headers: any; userRole: string; addToast: any }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -1241,24 +1481,23 @@ function ModelsTab({ headers, userRole, addToast }: { headers: any; userRole: st
   if (!data) return <div>Failed to load model registry. Ensure backend is running.</div>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Retrain header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+    <div className="flex flex-col gap-6 text-left">
+      <div className="flex justify-between items-center bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800">
+        <p className="text-xs text-slate-500 max-w-lg leading-normal">
           Manage trained classifiers, active deployments, and data drift logs.
         </p>
         {userRole === 'Admin' && (
-          <button onClick={handleRetrain} disabled={training} className="btn btn-primary">
-            <RefreshCw size={16} className={training ? 'animate-spin' : ''} />
+          <button onClick={handleRetrain} disabled={training} className="btn btn-primary py-2 px-4 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-blue-500/10">
+            <RefreshCw className={`h-4 w-4 ${training ? 'animate-spin' : ''}`} />
             <span>{training ? 'Training models...' : 'Run ML Training Pipeline'}</span>
           </button>
         )}
       </div>
 
-      <div className="grid-cols-12">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {/* Model versions table */}
-        <div className="col-span-8 card">
-          <div className="card-title">Model Registry</div>
+        <div className="lg:col-span-8 bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg">
+          <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Model Registry</div>
           <div className="table-container">
             <table className="table">
               <thead>
@@ -1275,25 +1514,25 @@ function ModelsTab({ headers, userRole, addToast }: { headers: any; userRole: st
               <tbody>
                 {data.models.map((m: any) => (
                   <tr key={m.id}>
-                    <td style={{ fontWeight: 600 }}>{m.version}</td>
+                    <td className="font-semibold text-xs">{m.version}</td>
                     <td>{m.name}</td>
                     <td>{m.metrics ? `${(m.metrics.auroc * 100).toFixed(1)}%` : 'N/A'}</td>
                     <td>{m.metrics ? `${(m.metrics.recall * 100).toFixed(1)}%` : 'N/A'}</td>
                     <td>{m.metrics ? `${(m.metrics.f1_score * 100).toFixed(1)}%` : 'N/A'}</td>
                     <td>
                       {m.is_active ? (
-                        <span className="badge badge-low" style={{ textTransform: 'capitalize' }}>Active</span>
+                        <span className="badge badge-low text-[10px] capitalize">Active</span>
                       ) : (
-                        <span className="badge" style={{ backgroundColor: 'var(--border)', color: 'var(--text-muted)' }}>Inactive</span>
+                        <span className="badge bg-slate-100 text-slate-400 border border-slate-200 text-[10px]">Inactive</span>
                       )}
                     </td>
                     <td>
                       {!m.is_active && userRole === 'Admin' ? (
-                        <button onClick={() => handleActivateModel(m.id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }}>
+                        <button onClick={() => handleActivateModel(m.id)} className="btn btn-secondary py-1 px-2.5 text-[10px]">
                           Activate
                         </button>
                       ) : (
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>-</span>
+                        <span className="text-slate-400">-</span>
                       )}
                     </td>
                   </tr>
@@ -1304,40 +1543,21 @@ function ModelsTab({ headers, userRole, addToast }: { headers: any; userRole: st
         </div>
 
         {/* Drift logs */}
-        <div className="col-span-4 card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="card-title">Data Drift Logs</div>
-          
-          <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Drift Status:</span>
-              <span className="badge badge-low" style={{ fontSize: '11px' }}>{data.drift_indicators.status}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>PSI score (Stability):</span>
-              <span style={{ fontWeight: 700, fontSize: '13px' }}>{data.drift_indicators.psi_score}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Last Checked:</span>
-              <span style={{ fontSize: '13px' }}>{data.drift_indicators.last_checked}</span>
-            </div>
-          </div>
-
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-            Data drift alerts trigger automatically when the Population Stability Index (PSI) exceeds 0.2, indicating significant demographic or procedural feature shift.
-          </p>
+        <div className="lg:col-span-4">
+          <DriftDashboard />
         </div>
       </div>
 
       {/* Feature Importance & Calibration */}
-      <div className="grid-cols-12">
-        <div className="col-span-6 card">
-          <div className="card-title">Global Feature Importance (Active Model)</div>
-          <div style={{ height: '260px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        <div className="lg:col-span-6 bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg">
+          <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Global Feature Importance (Active Model)</div>
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.feature_importances} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={data.feature_importances} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="feature" stroke="var(--text-muted)" style={{ fontSize: '11px' }} />
-                <YAxis stroke="var(--text-muted)" />
+                <XAxis dataKey="feature" stroke="#718096" style={{ fontSize: '9px' }} />
+                <YAxis stroke="#718096" style={{ fontSize: '10px' }} />
                 <Tooltip />
                 <Bar dataKey="importance" fill="#2b6cb0" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -1345,17 +1565,17 @@ function ModelsTab({ headers, userRole, addToast }: { headers: any; userRole: st
           </div>
         </div>
 
-        <div className="col-span-6 card">
-          <div className="card-title">Calibration Performance Curve</div>
-          <div style={{ height: '260px' }}>
+        <div className="lg:col-span-6 bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg">
+          <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Calibration Performance Curve</div>
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data.calibration_curve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <LineChart data={data.calibration_curve} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="bin" stroke="var(--text-muted)" />
-                <YAxis unit="%" stroke="var(--text-muted)" />
+                <XAxis dataKey="bin" stroke="#718096" style={{ fontSize: '10px' }} />
+                <YAxis unit="%" stroke="#718096" style={{ fontSize: '10px' }} />
                 <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="observed" stroke="#319795" name="Observed %" strokeWidth={2} activeDot={{ r: 8 }} />
+                <Legend style={{ fontSize: '10px' }} />
+                <Line type="monotone" dataKey="observed" stroke="#319795" name="Observed %" strokeWidth={2} activeDot={{ r: 6 }} />
                 <Line type="monotone" dataKey="predicted" stroke="#e53e3e" name="Predicted %" strokeDasharray="5 5" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
@@ -1366,7 +1586,6 @@ function ModelsTab({ headers, userRole, addToast }: { headers: any; userRole: st
   );
 }
 
-
 // --- AUDIT TRAIL TAB ---
 function AuditTab({ headers }: { headers: any }) {
   const [logs, setLogs] = useState<any[]>([]);
@@ -1375,15 +1594,18 @@ function AuditTab({ headers }: { headers: any }) {
   useEffect(() => {
     fetch(`${API_BASE}/api/audit-logs`, { headers })
       .then(res => res.json())
-      .then(json => { setLogs(json); setLoading(false); })
+      .then(json => {
+        if (Array.isArray(json)) setLogs(json);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
   if (loading) return <LoaderSkeleton />;
 
   return (
-    <div className="card">
-      <div className="card-title">Security & Operations Audit Trail (Admin-Only)</div>
+    <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/85 shadow-lg text-left">
+      <div className="font-display font-bold text-sm text-slate-900 dark:text-white mb-4">Security & Operations Audit Trail (Admin-Only)</div>
       <div className="table-container">
         <table className="table">
           <thead>
@@ -1398,15 +1620,15 @@ function AuditTab({ headers }: { headers: any }) {
           <tbody>
             {logs.map(log => (
               <tr key={log.id}>
-                <td style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{log.timestamp}</td>
-                <td style={{ fontWeight: 600 }}>{log.username}</td>
+                <td className="text-xs text-slate-400 whitespace-nowrap">{log.timestamp}</td>
+                <td className="font-semibold">{log.username}</td>
                 <td>
-                  <span className="badge" style={{ backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', border: '1px solid var(--border)' }}>
+                  <span className="badge bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200/60 text-[9px] uppercase tracking-wider">
                     {log.action}
                   </span>
                 </td>
-                <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{log.ip_address}</td>
-                <td style={{ fontSize: '13px' }}>{log.details}</td>
+                <td className="text-xs text-slate-400">{log.ip_address}</td>
+                <td className="text-xs leading-relaxed">{log.details}</td>
               </tr>
             ))}
           </tbody>
@@ -1416,16 +1638,15 @@ function AuditTab({ headers }: { headers: any }) {
   );
 }
 
-
 // --- UTILITY SKELETON COMPONENT ---
 function LoaderSkeleton() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
-      <div className="skeleton" style={{ height: '40px', width: '30%' }}></div>
-      <div className="skeleton" style={{ height: '200px', width: '100%' }}></div>
-      <div className="grid-cols-12" style={{ width: '100%' }}>
-        <div className="col-span-6 skeleton" style={{ height: '150px' }}></div>
-        <div className="col-span-6 skeleton" style={{ height: '150px' }}></div>
+    <div className="flex flex-col gap-6 w-full text-left">
+      <div className="skeleton h-8 w-[240px]"></div>
+      <div className="skeleton h-48 w-full"></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+        <div className="skeleton h-32"></div>
+        <div className="skeleton h-32"></div>
       </div>
     </div>
   );
